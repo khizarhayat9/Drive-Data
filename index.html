@@ -1,0 +1,1805 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4E1609" />
+    <title>DRIVE DATA — Personal Transport Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.26.0/babel.min.js"></script>
+    <style>
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #ffffff !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-[#FAD8C8] text-gray-900 antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo } from 'https://esm.sh/react@18.3.1';
+        import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
+        import {
+            getAuth,
+            onAuthStateChanged,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword,
+            sendPasswordResetEmail,
+            signInWithPopup,
+            GoogleAuthProvider,
+            signOut,
+            updateProfile
+        } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+        import {
+            initializeFirestore,
+            persistentLocalCache,
+            persistentMultipleTabManager,
+            collection,
+            doc,
+            addDoc,
+            updateDoc,
+            deleteDoc,
+            setDoc,
+            onSnapshot,
+            serverTimestamp
+        } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import {
+            PlusCircle,
+            LayoutDashboard,
+            History,
+            Receipt,
+            Settings,
+            LogOut,
+            Search,
+            Trash2,
+            Edit3,
+            FileSpreadsheet,
+            Printer,
+            Filter,
+            CheckCircle2,
+            AlertCircle,
+            Eye,
+            EyeOff,
+            ShieldCheck,
+            X,
+            Globe
+        } from 'https://esm.sh/lucide-react@0.454.0?deps=react@18.3.1';
+
+        // ========================================================================
+        // LIVE FIREBASE CONFIGURATION (drive-data-cecbb)
+        // ========================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAqtoRU_cxeW4aLlBbytNgr5j54PoYJeUk",
+            authDomain: "drive-data-cecbb.firebaseapp.com",
+            projectId: "drive-data-cecbb",
+            storageBucket: "drive-data-cecbb.firebasestorage.app",
+            messagingSenderId: "968715568953",
+            appId: "1:968715568953:web:2bf8d67a6116f60969cae8",
+            measurementId: "G-W6SJSWL2R4"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const googleProvider = new GoogleAuthProvider();
+
+        const db = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+                tabManager: persistentMultipleTabManager()
+            })
+        });
+
+        const APP_ID = 'drive-data-prod';
+
+        const CURRENCIES = [
+            { code: 'PKR', symbol: 'Rs.', name: 'Pakistani Rupee (PKR)' },
+            { code: 'USD', symbol: '$', name: 'US Dollar (USD)' },
+            { code: 'SAR', symbol: 'SAR ', name: 'Saudi Riyal (SAR)' },
+            { code: 'AED', symbol: 'AED ', name: 'UAE Dirham (AED)' },
+            { code: 'EUR', symbol: '€', name: 'Euro (EUR)' },
+            { code: 'GBP', symbol: '£', name: 'British Pound (GBP)' },
+            { code: 'INR', symbol: '₹', name: 'Indian Rupee (INR)' },
+            { code: 'QAR', symbol: 'QAR ', name: 'Qatari Riyal (QAR)' },
+            { code: 'OMR', symbol: 'OMR ', name: 'Omani Rial (OMR)' },
+            { code: 'KWD', symbol: 'KWD ', name: 'Kuwaiti Dinar (KWD)' },
+            { code: 'TRY', symbol: '₺', name: 'Turkish Lira (TRY)' },
+            { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar (CAD)' },
+            { code: 'AUD', symbol: 'A$', name: 'Australian Dollar (AUD)' }
+        ];
+
+        const TRIP_TYPES = ['Airport Transfer', 'City Trip', 'Full-Day Trip', 'Outstation', 'Other'];
+        const EXPENSE_CATEGORIES = ['Fuel', 'Meals', 'Vehicle Maintenance', 'Parking', 'Tolls', 'Insurance / Tax', 'Other'];
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        const formatMoney = (amount, symbol = 'Rs.') => {
+            const num = Number(amount) || 0;
+            return `${symbol}${num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+        };
+
+        const formatCompact = (amount, symbol = 'Rs.') => {
+            const num = Number(amount) || 0;
+            if (Math.abs(num) >= 1000000) return `${symbol}${(num / 1000000).toFixed(2)}M`;
+            if (Math.abs(num) >= 1000) return `${symbol}${(num / 1000).toFixed(1)}K`;
+            return `${symbol}${num.toFixed(0)}`;
+        };
+
+        // ========================================================================
+        // 3D METALLIC MAROON & GOLD CAR LOGO
+        // ========================================================================
+        function CarLogo3D({ size = 'md' }) {
+            const dims = size === 'lg' ? 'w-16 h-16' : size === 'sm' ? 'w-9 h-9' : 'w-11 h-11';
+            return (
+                <div
+                    className={`${dims} relative rounded-2xl flex items-center justify-center shadow-lg shrink-0 select-none`}
+                    style={{
+                        background: 'linear-gradient(145deg, #6B1D0E 0%, #3A0E05 60%, #1F0702 100%)',
+                        border: '1.5px solid #E5A93C',
+                        boxShadow: '0 8px 20px rgba(78, 22, 9, 0.35), inset 0 2px 4px rgba(255, 215, 130, 0.35)'
+                    }}
+                >
+                    <svg viewBox="0 0 120 120" className="w-4/5 h-4/5 drop-shadow-md">
+                        <defs>
+                            <linearGradient id="goldBody" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stopColor="#FFF1B8" />
+                                <stop offset="45%" stopColor="#F5B942" />
+                                <stop offset="100%" stopColor="#B87414" />
+                            </linearGradient>
+                            <linearGradient id="cabinGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#2B0B04" />
+                                <stop offset="100%" stopColor="#692010" />
+                            </linearGradient>
+                            <radialGradient id="wheelRim" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stopColor="#FFE299" />
+                                <stop offset="65%" stopColor="#C98218" />
+                                <stop offset="100%" stopColor="#1A0602" />
+                            </radialGradient>
+                        </defs>
+                        <ellipse cx="60" cy="94" rx="46" ry="7" fill="rgba(0,0,0,0.45)" />
+                        <path
+                            d="M14 70 Q16 56 32 52 L46 34 Q54 27 72 28 L90 46 Q106 50 108 66 L106 76 Q104 81 96 81 L22 81 Q14 80 14 70 Z"
+                            fill="url(#goldBody)"
+                            stroke="#FFF5CC"
+                            strokeWidth="1.5"
+                        />
+                        <path d="M48 36 L69 36 L83 49 L38 49 Z" fill="url(#cabinGlass)" stroke="#F7C96B" strokeWidth="1.2" />
+                        <ellipse cx="103" cy="63" rx="4" ry="2.5" fill="#FFFDF0" />
+                        <ellipse cx="17" cy="64" rx="3.5" ry="2" fill="#FF5A36" />
+                        <path d="M28 63 L88 61" stroke="#4E1609" strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="34" cy="80" r="12" fill="#170703" stroke="#E5A93C" strokeWidth="2" />
+                        <circle cx="34" cy="80" r="6" fill="url(#wheelRim)" />
+                        <circle cx="86" cy="80" r="12" fill="#170703" stroke="#E5A93C" strokeWidth="2" />
+                        <circle cx="86" cy="80" r="6" fill="url(#wheelRim)" />
+                    </svg>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // MICROSOFT EXCEL (.XLS) MULTI-SHEET WORKBOOK EXPORTER
+        // ========================================================================
+        function exportToExcelWorkbook({ trips, expenses, currencySymbol, periodLabel, userEmail }) {
+            const escapeXml = (str) =>
+                String(str ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+
+            const totalIncome = trips.reduce((s, t) => s + (Number(t.price) || 0), 0);
+            const totalFuel = trips.reduce((s, t) => s + (Number(t.fuel) || 0), 0);
+            const totalMeals = trips.reduce((s, t) => s + (Number(t.meals) || 0), 0);
+            const totalTripOther = trips.reduce((s, t) => s + (Number(t.other) || 0), 0);
+            const standaloneTotal = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+            const totalExpenses = totalFuel + totalMeals + totalTripOther + standaloneTotal;
+            const netProfit = totalIncome - totalExpenses;
+
+            const tripRowsXml = trips.map((t) => `
+        <Row>
+          <Cell><Data ss:Type="String">${escapeXml(t.date)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.title)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.tripType)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.client)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.vehicle)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.startLocation)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.destination)}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.price) || 0}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.fuel) || 0}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.meals) || 0}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.other) || 0}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.totalExpenses) || 0}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(t.netProfit) || 0}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(t.notes)}</Data></Cell>
+        </Row>`).join('');
+
+            const expenseRowsXml = expenses.map((e) => `
+        <Row>
+          <Cell><Data ss:Type="String">${escapeXml(e.date)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(e.category)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(e.title)}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(e.vehicle)}</Data></Cell>
+          <Cell><Data ss:Type="Number">${Number(e.amount) || 0}</Data></Cell>
+          <Cell><Data ss:Type="String">${escapeXml(e.notes)}</Data></Cell>
+        </Row>`).join('');
+
+            const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#4E1609" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="14" ss:Color="#4E1609"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Executive Summary">
+  <Table>
+   <Row><Cell ss:StyleID="Title"><Data ss:Type="String">DRIVE DATA — Transport Financial Report (${escapeXml(periodLabel)})</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Account: ${escapeXml(userEmail)} | Currency: ${escapeXml(currencySymbol)} | Generated: ${new Date().toLocaleDateString()}</Data></Cell></Row>
+   <Row></Row>
+   <Row><Cell ss:StyleID="Header"><Data ss:Type="String">Metric</Data></Cell><Cell ss:StyleID="Header"><Data ss:Type="String">Value</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Total Completed Trips</Data></Cell><Cell><Data ss:Type="Number">${trips.length}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Gross Trip Income</Data></Cell><Cell><Data ss:Type="Number">${totalIncome}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Trip Fuel Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalFuel}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Trip Meal Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalMeals}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Other Trip Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalTripOther}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Standalone Vehicle/Ops Expenses</Data></Cell><Cell><Data ss:Type="Number">${standaloneTotal}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Total Combined Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalExpenses}</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Net Profit</Data></Cell><Cell><Data ss:Type="Number">${netProfit}</Data></Cell></Row>
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Trip Records">
+  <Table>
+   <Row>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Date</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Trip Title</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Trip Type</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Client / Org</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Vehicle</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">From</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">To</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Income</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Fuel</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Meals</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Other</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Total Expenses</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Net Profit</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Notes</Data></Cell>
+   </Row>
+   ${tripRowsXml}
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Standalone Expenses">
+  <Table>
+   <Row>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Date</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Category</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Description</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Vehicle</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Amount</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Notes</Data></Cell>
+   </Row>
+   ${expenseRowsXml}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+            const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `DRIVE_DATA_${periodLabel.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xls`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // ========================================================================
+        // AUTHENTICATION SCREEN
+        // ========================================================================
+        function AuthScreen() {
+            const [mode, setMode] = useState('login');
+            const [fullName, setFullName] = useState('');
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [showPass, setShowPass] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [message, setMessage] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                setMessage('');
+                setLoading(true);
+                try {
+                    if (mode === 'login') {
+                        await signInWithEmailAndPassword(auth, email.trim(), password);
+                    } else if (mode === 'register') {
+                        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+                        if (fullName.trim()) {
+                            await updateProfile(cred.user, { displayName: fullName.trim() });
+                        }
+                    } else if (mode === 'reset') {
+                        await sendPasswordResetEmail(auth, email.trim());
+                        setMessage('Password recovery link sent! Check your email inbox.');
+                    }
+                } catch (err) {
+                    const code = err?.code || '';
+                    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+                        setError('Invalid email or password. Please check your credentials.');
+                    } else if (code === 'auth/email-already-in-use') {
+                        setError('An account with this email already exists. Please sign in.');
+                    } else if (code === 'auth/weak-password') {
+                        setError('Password must be at least 6 characters long.');
+                    } else if (code === 'auth/unauthorized-domain') {
+                        setError('Add this website domain in Firebase Console → Authentication → Settings → Authorized domains.');
+                    } else {
+                        setError(err?.message || 'Authentication failed. Please try again.');
+                    }
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleGoogleLogin = async () => {
+                setError('');
+                setMessage('');
+                setLoading(true);
+                try {
+                    await signInWithPopup(auth, googleProvider);
+                } catch (err) {
+                    if (err?.code === 'auth/unauthorized-domain') {
+                        setError('Add your deployed website URL to Firebase Console → Authentication → Settings → Authorized domains.');
+                    } else if (err?.code !== 'auth/popup-closed-by-user') {
+                        setError(err?.message || 'Google Sign-In failed.');
+                    }
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #FAD8C8 0%, #F4BFA8 50%, #E89E82 100%)' }}>
+                    <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-[#4E1609]/20">
+                        <div className="bg-[#4E1609] px-7 py-6 text-white flex items-center gap-4 border-b-4 border-[#E5A93C]">
+                            <CarLogo3D size="lg" />
+                            <div>
+                                <h1 className="text-2xl font-black tracking-wider text-[#FFF6E5]">DRIVE DATA</h1>
+                                <p className="text-xs text-[#F7C96B] font-medium mt-0.5">Cloud Transport & Fleet Analytics</p>
+                            </div>
+                        </div>
+
+                        <div className="p-7">
+                            <div className="flex gap-2 bg-[#FFF3ED] p-1.5 rounded-xl mb-6 border border-[#E8C5B5]">
+                                <button
+                                    type="button"
+                                    onClick={() => { setMode('login'); setError(''); setMessage(''); }}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'login' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609] hover:bg-white/60'}`}
+                                >
+                                    Sign In
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setMode('register'); setError(''); setMessage(''); }}
+                                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'register' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609] hover:bg-white/60'}`}
+                                >
+                                    Create Account
+                                </button>
+                            </div>
+
+                            {error && (
+                                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
+                                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            {message && (
+                                <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2">
+                                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                                    <span>{message}</span>
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                {mode === 'register' && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">
+                                            Driver / Owner Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                            placeholder="e.g. Khizar Hayat"
+                                            className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                        />
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        type="email"
+                                        required
+                                        autoComplete="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        placeholder="driver@example.com"
+                                        className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                    />
+                                </div>
+
+                                {mode !== 'reset' && (
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider">
+                                                Password
+                                            </label>
+                                            {mode === 'login' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setMode('reset'); setError(''); setMessage(''); }}
+                                                    className="text-xs font-semibold text-[#8B2610] hover:underline"
+                                                >
+                                                    Forgot password?
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type={showPass ? 'text' : 'password'}
+                                                required
+                                                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                placeholder="Enter your password"
+                                                className="w-full px-4 py-3 pr-11 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPass((prev) => !prev)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#4E1609] p-1"
+                                            >
+                                                {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-bold text-sm tracking-wide shadow-lg transition disabled:opacity-60"
+                                >
+                                    {loading
+                                        ? 'Connecting to Cloud...'
+                                        : mode === 'login'
+                                            ? 'Sign In to Dashboard'
+                                            : mode === 'register'
+                                                ? 'Create Secure Account'
+                                                : 'Send Password Reset Email'}
+                                </button>
+
+                                {mode === 'reset' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('login')}
+                                        className="w-full py-2 text-xs font-bold text-[#4E1609] hover:underline"
+                                    >
+                                        ← Back to Sign In
+                                    </button>
+                                )}
+                            </form>
+
+                            {mode !== 'reset' && (
+                                <>
+                                    <div className="relative my-5">
+                                        <div className="absolute inset-0 flex items-center">
+                                            <div className="w-full border-t border-[#E8C5B5]" />
+                                        </div>
+                                        <div className="relative flex justify-center text-xs">
+                                            <span className="px-3 bg-white text-gray-500 font-medium">OR</span>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleGoogleLogin}
+                                        disabled={loading}
+                                        className="w-full py-3 rounded-xl border-2 border-[#4E1609]/20 bg-white hover:bg-[#FFF6F2] text-[#4E1609] font-bold text-sm flex items-center justify-center gap-3 transition shadow-sm"
+                                    >
+                                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                                            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z" />
+                                            <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z" />
+                                            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z" />
+                                        </svg>
+                                        Continue with Google
+                                    </button>
+                                </>
+                            )}
+
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-center gap-2 text-[11px] text-gray-500">
+                                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>Private Cloud Sync & Offline Mobile Storage Enabled</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // 1. RECORD TRIP VIEW (FIRST NAVIGATION TAB)
+        // ========================================================================
+        function RecordTripView({ user, currencySymbol, editingTrip, onCancelEdit, onSaved, defaultVehicle }) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const [title, setTitle] = useState('');
+            const [date, setDate] = useState(todayStr);
+            const [vehicle, setVehicle] = useState(defaultVehicle || '');
+            const [client, setClient] = useState('');
+            const [tripType, setTripType] = useState('City Trip');
+            const [startLocation, setStartLocation] = useState('');
+            const [destination, setDestination] = useState('');
+            const [price, setPrice] = useState('');
+            const [fuel, setFuel] = useState('');
+            const [meals, setMeals] = useState('');
+            const [other, setOther] = useState('');
+            const [notes, setNotes] = useState('');
+            const [saving, setSaving] = useState(false);
+
+            useEffect(() => {
+                if (editingTrip) {
+                    setTitle(editingTrip.title || '');
+                    setDate(editingTrip.date || todayStr);
+                    setVehicle(editingTrip.vehicle || defaultVehicle || '');
+                    setClient(editingTrip.client || '');
+                    setTripType(editingTrip.tripType || 'City Trip');
+                    setStartLocation(editingTrip.startLocation || '');
+                    setDestination(editingTrip.destination || '');
+                    setPrice(editingTrip.price ?? '');
+                    setFuel(editingTrip.fuel ?? '');
+                    setMeals(editingTrip.meals ?? '');
+                    setOther(editingTrip.other ?? '');
+                    setNotes(editingTrip.notes || '');
+                } else {
+                    setTitle('');
+                    setDate(todayStr);
+                    setVehicle(defaultVehicle || '');
+                    setClient('');
+                    setTripType('City Trip');
+                    setStartLocation('');
+                    setDestination('');
+                    setPrice('');
+                    setFuel('');
+                    setMeals('');
+                    setOther('');
+                    setNotes('');
+                }
+            }, [editingTrip, defaultVehicle, todayStr]);
+
+            const numPrice = parseFloat(price) || 0;
+            const numFuel = parseFloat(fuel) || 0;
+            const numMeals = parseFloat(meals) || 0;
+            const numOther = parseFloat(other) || 0;
+            const totalExpenses = numFuel + numMeals + numOther;
+            const netProfit = numPrice - totalExpenses;
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                try {
+                    const payload = {
+                        title: title.trim() || `${tripType} - ${destination || 'Trip'}`,
+                        date,
+                        vehicle: vehicle.trim() || 'Primary Vehicle',
+                        client: client.trim() || 'Direct Client',
+                        tripType,
+                        startLocation: startLocation.trim(),
+                        destination: destination.trim(),
+                        price: numPrice,
+                        fuel: numFuel,
+                        meals: numMeals,
+                        other: numOther,
+                        totalExpenses,
+                        netProfit,
+                        notes: notes.trim(),
+                        updatedAt: serverTimestamp()
+                    };
+
+                    const tripsRef = collection(db, 'artifacts', APP_ID, 'users', user.uid, 'trips');
+                    if (editingTrip?.id) {
+                        await updateDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'trips', editingTrip.id), payload);
+                    } else {
+                        await addDoc(tripsRef, { ...payload, createdAt: serverTimestamp() });
+                    }
+
+                    if (!editingTrip) {
+                        setTitle('');
+                        setClient('');
+                        setStartLocation('');
+                        setDestination('');
+                        setPrice('');
+                        setFuel('');
+                        setMeals('');
+                        setOther('');
+                        setNotes('');
+                    }
+                    onSaved(editingTrip ? 'Trip updated in cloud!' : 'Trip recorded & synced!');
+                } catch (err) {
+                    alert('Error saving trip: ' + err.message);
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="bg-[#4E1609] text-white px-6 py-4 rounded-2xl mb-5 flex flex-wrap items-center justify-between gap-3 shadow-md border-b-4 border-[#E5A93C]">
+                        <div>
+                            <h2 className="text-lg font-extrabold tracking-wide">
+                                {editingTrip ? 'Edit Transport Record' : 'Record New Transport Trip'}
+                            </h2>
+                            <p className="text-xs text-[#FAD8C8]">Auto-calculates expenses & net profit • Works offline & syncs to cloud</p>
+                        </div>
+                        {editingTrip && (
+                            <button
+                                type="button"
+                                onClick={onCancelEdit}
+                                className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-bold flex items-center gap-1"
+                            >
+                                <X className="w-4 h-4" /> Cancel Edit
+                            </button>
+                        )}
+                    </div>
+
+                    <form onSubmit={handleSave} className="bg-white rounded-2xl p-6 shadow-md border border-[#E2B8A6] space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Title *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    placeholder="e.g. Islamabad Airport Drop-off"
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Date *</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Type *</label>
+                                <select
+                                    value={tripType}
+                                    onChange={(e) => setTripType(e.target.value)}
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                >
+                                    {TRIP_TYPES.map((t) => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Client / Organization</label>
+                                <input
+                                    type="text"
+                                    value={client}
+                                    onChange={(e) => setClient(e.target.value)}
+                                    placeholder="e.g. Corporate Guest / Walk-in"
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Vehicle Details</label>
+                                <input
+                                    type="text"
+                                    value={vehicle}
+                                    onChange={(e) => setVehicle(e.target.value)}
+                                    placeholder="e.g. Toyota Corolla GLi (ABC-123)"
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Starting Location</label>
+                                <input
+                                    type="text"
+                                    value={startLocation}
+                                    onChange={(e) => setStartLocation(e.target.value)}
+                                    placeholder="Pickup point"
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Destination</label>
+                                <input
+                                    type="text"
+                                    value={destination}
+                                    onChange={(e) => setDestination(e.target.value)}
+                                    placeholder="Drop-off point"
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-[#FFF4EE] border border-[#E8C5B5]">
+                            <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#4E1609] mb-3">
+                                Trip Fare & Expenses ({currencySymbol})
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-emerald-800 mb-1">Trip Income *</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        required
+                                        value={price}
+                                        onChange={(e) => setPrice(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white text-base font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-[#4E1609] mb-1">Fuel Cost</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={fuel}
+                                        onChange={(e) => setFuel(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-[#4E1609] mb-1">Meal Cost</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={meals}
+                                        onChange={(e) => setMeals(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-[#4E1609] mb-1">Tolls / Parking / Other</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        value={other}
+                                        onChange={(e) => setOther(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-[#E2B8A6] grid grid-cols-2 gap-4">
+                                <div className="bg-white p-3 rounded-xl border border-[#E8C5B5]">
+                                    <span className="text-[11px] font-bold uppercase text-gray-500 block">Total Trip Expenses</span>
+                                    <span className="text-lg font-black text-[#8B2610]">{formatMoney(totalExpenses, currencySymbol)}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-[#E8C5B5]">
+                                    <span className="text-[11px] font-bold uppercase text-gray-500 block">Net Trip Profit</span>
+                                    <span className={`text-lg font-black ${netProfit >= 0 ? 'text-[#4E8B31]' : 'text-red-600'}`}>
+                                        {formatMoney(netProfit, currencySymbol)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Additional Notes</label>
+                            <textarea
+                                rows="2"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                placeholder="Odometer reading, receipt notes, waiting time..."
+                                className="w-full px-3.5 py-2 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4E1609]"
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-extrabold text-sm tracking-wide shadow-lg transition flex items-center justify-center gap-2"
+                        >
+                            <PlusCircle className="w-5 h-5 text-[#F5B942]" />
+                            {saving ? 'Saving to Cloud...' : editingTrip ? 'Update Trip Record' : 'Save Trip Record'}
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // 2. EXECUTIVE BI DASHBOARD VIEW
+        // ========================================================================
+        function DashboardView({ trips, expenses, currencySymbol, userEmail }) {
+            const [selectedYear, setSelectedYear] = useState('All');
+            const [selectedMonth, setSelectedMonth] = useState('All');
+            const [selectedType, setSelectedType] = useState('All');
+            const [selectedVehicle, setSelectedVehicle] = useState('All');
+            const [reportTab, setReportTab] = useState('all');
+
+            const availableYears = useMemo(() => {
+                const yrs = new Set([String(new Date().getFullYear())]);
+                trips.forEach((t) => { if (t.date && t.date.length >= 4) yrs.add(t.date.slice(0, 4)); });
+                return ['All', ...Array.from(yrs).sort().reverse()];
+            }, [trips]);
+
+            const availableVehicles = useMemo(() => {
+                const vSet = new Set();
+                trips.forEach((t) => { if (t.vehicle) vSet.add(t.vehicle); });
+                return ['All', ...Array.from(vSet)];
+            }, [trips]);
+
+            const { filteredTrips, filteredExpenses } = useMemo(() => {
+                const now = new Date();
+                const todayStr = now.toISOString().slice(0, 10);
+                const sevenDaysAgo = new Date(now);
+                sevenDaysAgo.setDate(now.getDate() - 7);
+                const currentMonthPrefix = todayStr.slice(0, 7);
+
+                const matchDateFilter = (dateStr) => {
+                    if (!dateStr) return true;
+                    if (selectedYear !== 'All' && !dateStr.startsWith(selectedYear)) return false;
+                    if (selectedMonth !== 'All') {
+                        const mIdx = MONTHS.indexOf(selectedMonth);
+                        const mNum = String(mIdx + 1).padStart(2, '0');
+                        if (dateStr.slice(5, 7) !== mNum) return false;
+                    }
+                    if (reportTab === 'daily') return dateStr === todayStr;
+                    if (reportTab === 'weekly') return new Date(dateStr) >= sevenDaysAgo;
+                    if (reportTab === 'monthly') return dateStr.startsWith(currentMonthPrefix);
+                    return true;
+                };
+
+                const fTrips = trips.filter((t) => {
+                    if (!matchDateFilter(t.date)) return false;
+                    if (selectedType !== 'All' && t.tripType !== selectedType) return false;
+                    if (selectedVehicle !== 'All' && t.vehicle !== selectedVehicle) return false;
+                    return true;
+                });
+
+                const fExpenses = expenses.filter((e) => {
+                    if (!matchDateFilter(e.date)) return false;
+                    if (selectedVehicle !== 'All' && e.vehicle && e.vehicle !== selectedVehicle) return false;
+                    return true;
+                });
+
+                return { filteredTrips: fTrips, filteredExpenses: fExpenses };
+            }, [trips, expenses, selectedYear, selectedMonth, selectedType, selectedVehicle, reportTab]);
+
+            const stats = useMemo(() => {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const totalTrips = filteredTrips.length;
+                const todayTrips = trips.filter((t) => t.date === todayStr).length;
+                const totalIncome = filteredTrips.reduce((s, t) => s + (Number(t.price) || 0), 0);
+                const tripFuel = filteredTrips.reduce((s, t) => s + (Number(t.fuel) || 0), 0);
+                const tripMeals = filteredTrips.reduce((s, t) => s + (Number(t.meals) || 0), 0);
+                const tripOther = filteredTrips.reduce((s, t) => s + (Number(t.other) || 0), 0);
+
+                const standaloneFuel = filteredExpenses.filter((e) => e.category === 'Fuel').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                const standaloneMeals = filteredExpenses.filter((e) => e.category === 'Meals').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                const standaloneMaint = filteredExpenses.filter((e) => e.category === 'Vehicle Maintenance').reduce((s, e) => s + (Number(e.amount) || 0), 0);
+                const standaloneOther = filteredExpenses.filter((e) => !['Fuel', 'Meals', 'Vehicle Maintenance'].includes(e.category)).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+                const totalFuel = tripFuel + standaloneFuel;
+                const totalMeals = tripMeals + standaloneMeals;
+                const totalMaint = standaloneMaint;
+                const totalOther = tripOther + standaloneOther;
+                const totalExpenses = totalFuel + totalMeals + totalMaint + totalOther;
+                const netProfit = totalIncome - totalExpenses;
+                const avgIncome = totalTrips > 0 ? totalIncome / totalTrips : 0;
+                const profitMarginPct = totalIncome > 0 ? Math.max(0, Math.min(100, (netProfit / totalIncome) * 100)) : 0;
+
+                return { totalTrips, todayTrips, totalIncome, totalFuel, totalMeals, totalMaint, totalOther, totalExpenses, netProfit, avgIncome, profitMarginPct };
+            }, [filteredTrips, filteredExpenses, trips]);
+
+            const monthlySeries = useMemo(() => {
+                return MONTHS.map((m, idx) => {
+                    const mNum = String(idx + 1).padStart(2, '0');
+                    const mTrips = filteredTrips.filter((t) => t.date && t.date.slice(5, 7) === mNum);
+                    const income = mTrips.reduce((s, t) => s + (Number(t.price) || 0), 0);
+                    const expense = mTrips.reduce((s, t) => s + (Number(t.totalExpenses) || 0), 0);
+                    return { month: m, income, expense, profit: income - expense };
+                });
+            }, [filteredTrips]);
+
+            const maxMonthlyIncome = Math.max(1, ...monthlySeries.map((d) => d.income));
+
+            const typePerformance = useMemo(() => {
+                return TRIP_TYPES.map((type) => {
+                    const subset = filteredTrips.filter((t) => t.tripType === type);
+                    const profit = subset.reduce((s, t) => s + (Number(t.netProfit) || 0), 0);
+                    return { type, profit };
+                }).sort((a, b) => b.profit - a.profit);
+            }, [filteredTrips]);
+
+            const maxTypeProfit = Math.max(1, ...typePerformance.map((d) => Math.abs(d.profit)));
+
+            const expenseCylinders = useMemo(() => {
+                const denom = Math.max(1, stats.totalExpenses);
+                return [
+                    { label: 'Fuel', amount: stats.totalFuel, pct: Math.round((stats.totalFuel / denom) * 100), color: '#5E8C31' },
+                    { label: 'Meals', amount: stats.totalMeals, pct: Math.round((stats.totalMeals / denom) * 100), color: '#7AA346' },
+                    { label: 'Maint.', amount: stats.totalMaint, pct: Math.round((stats.totalMaint / denom) * 100), color: '#C97B2B' },
+                    { label: 'Other', amount: stats.totalOther, pct: Math.round((stats.totalOther / denom) * 100), color: '#8B2610' }
+                ];
+            }, [stats]);
+
+            const ringSegments = 24;
+            const activeSegments = Math.round((stats.profitMarginPct / 100) * ringSegments);
+
+            return (
+                <div className="flex flex-col xl:flex-row gap-4">
+                    <div className="flex-1 space-y-4">
+                        <div className="bg-[#4E1609] rounded-2xl px-5 py-3.5 text-white flex flex-wrap items-center justify-between gap-3 shadow-md border-b-4 border-[#E5A93C]">
+                            <div>
+                                <h2 className="text-lg md:text-xl font-black tracking-wide text-[#FFF8EB]">
+                                    DRIVE DATA — Executive Transport Analytics
+                                </h2>
+                                <p className="text-[11px] text-[#FAD8C8]">
+                                    Live Cloud Sync • Today's Trips: <strong className="text-[#F5B942]">{stats.todayTrips}</strong> • Avg/Trip: <strong className="text-[#F5B942]">{formatCompact(stats.avgIncome, currencySymbol)}</strong>
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 no-print">
+                                <div className="flex bg-[#340D04] p-1 rounded-xl border border-[#7A2917]">
+                                    {[
+                                        { id: 'all', label: 'All' },
+                                        { id: 'daily', label: 'Today' },
+                                        { id: 'weekly', label: 'Weekly' },
+                                        { id: 'monthly', label: 'Monthly' }
+                                    ].map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            type="button"
+                                            onClick={() => setReportTab(tab.id)}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${reportTab === tab.id ? 'bg-[#E5A93C] text-[#340D04]' : 'text-[#FAD8C8] hover:text-white'
+                                                }`}
+                                        >
+                                            {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => exportToExcelWorkbook({ trips: filteredTrips, expenses: filteredExpenses, currencySymbol, periodLabel: reportTab.toUpperCase(), userEmail })}
+                                    className="px-3 py-1.5 rounded-xl bg-[#5E8C31] hover:bg-[#4D7526] text-white text-xs font-extrabold flex items-center gap-1.5 shadow"
+                                >
+                                    <FileSpreadsheet className="w-4 h-4" />
+                                    Export Excel (.xls)
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => window.print()}
+                                    className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1.5"
+                                >
+                                    <Printer className="w-4 h-4" />
+                                    Print
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                            {[
+                                { label: 'Total Trips', value: stats.totalTrips, sub: `${stats.todayTrips} completed today` },
+                                { label: 'Gross Income', value: formatCompact(stats.totalIncome, currencySymbol), sub: `Avg ${formatCompact(stats.avgIncome, currencySymbol)}/trip` },
+                                { label: 'Total Expenses', value: formatCompact(stats.totalExpenses, currencySymbol), sub: `Fuel ${formatCompact(stats.totalFuel, currencySymbol)}` },
+                                { label: 'Net Profit', value: formatCompact(stats.netProfit, currencySymbol), sub: `${stats.profitMarginPct.toFixed(1)}% margin`, highlight: true },
+                                { label: 'Fuel & Meals', value: formatCompact(stats.totalFuel + stats.totalMeals, currencySymbol), sub: `Meals ${formatCompact(stats.totalMeals, currencySymbol)}` }
+                            ].map((kpi, idx) => (
+                                <div key={idx} className="bg-white rounded-2xl p-4 text-center shadow-sm border border-[#E2B8A6] flex flex-col justify-between">
+                                    <div className={`text-2xl md:text-3xl font-black tracking-tight ${kpi.highlight ? 'text-[#4E8B31]' : 'text-[#2B120B]'}`}>
+                                        {kpi.value}
+                                    </div>
+                                    <div className="text-xs font-extrabold text-[#4E1609] mt-1">{kpi.label}</div>
+                                    <div className="text-[10px] text-gray-500 mt-0.5">{kpi.sub}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                            <div className="lg:col-span-3 bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6] flex flex-col items-center justify-between">
+                                <h3 className="text-xs font-extrabold text-[#4E1609] uppercase tracking-wider text-center">Net Profit Margin %</h3>
+                                <div className="relative w-44 h-44 flex items-center justify-center my-2">
+                                    <svg viewBox="0 0 160 160" className="w-full h-full">
+                                        {Array.from({ length: ringSegments }).map((_, i) => {
+                                            const angle = (i / ringSegments) * 2 * Math.PI - Math.PI / 2;
+                                            const cx = 80 + 58 * Math.cos(angle);
+                                            const cy = 80 + 58 * Math.sin(angle);
+                                            const active = i < activeSegments;
+                                            return <circle key={i} cx={cx} cy={cy} r={active ? 6.2 : 4.8} fill={active ? '#5E8C31' : '#E8D5CC'} />;
+                                        })}
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-black text-[#2B120B]">{stats.profitMarginPct.toFixed(1)}%</span>
+                                        <span className="text-[10px] font-bold text-gray-500">Profit Ratio</span>
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-center text-gray-600 font-medium">
+                                    Net: <strong className="text-[#4E8B31]">{formatMoney(stats.netProfit, currencySymbol)}</strong>
+                                </p>
+                            </div>
+
+                            <div className="lg:col-span-5 bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6] flex flex-col justify-between">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-xs font-extrabold text-[#4E1609] uppercase tracking-wider">Monthly Trip Income</h3>
+                                    <span className="text-[10px] font-bold text-gray-500">Jan – Dec</span>
+                                </div>
+                                <div className="h-48 flex items-end justify-between gap-1.5 pt-6 pb-1 px-1 border-b border-gray-200">
+                                    {monthlySeries.map((item) => {
+                                        const heightPct = Math.max(6, Math.round((item.income / maxMonthlyIncome) * 100));
+                                        return (
+                                            <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group">
+                                                <span className="text-[9px] font-bold text-[#4E1609] mb-1 opacity-80 group-hover:opacity-100">
+                                                    {item.income > 0 ? formatCompact(item.income, '') : ''}
+                                                </span>
+                                                <div
+                                                    title={`${item.month}: ${formatMoney(item.income, currencySymbol)}`}
+                                                    className="w-full max-w-[20px] rounded-t-full transition-all duration-500"
+                                                    style={{
+                                                        height: `${item.income > 0 ? heightPct : 4}%`,
+                                                        background: item.income > 0 ? 'linear-gradient(180deg, #7A2310 0%, #4E1609 100%)' : '#F0DFD7'
+                                                    }}
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex justify-between px-1 pt-1.5">
+                                    {monthlySeries.map((item) => (
+                                        <span key={item.month} className="flex-1 text-center text-[10px] font-bold text-gray-600">{item.month}</span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-4 bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6] flex flex-col justify-between">
+                                <h3 className="text-xs font-extrabold text-[#4E1609] uppercase tracking-wider mb-3">Net Profit by Trip Type</h3>
+                                <div className="space-y-3 my-auto">
+                                    {typePerformance.map((item) => {
+                                        const widthPct = Math.max(14, Math.min(100, Math.round((Math.abs(item.profit) / maxTypeProfit) * 100)));
+                                        return (
+                                            <div key={item.type} className="flex items-center gap-2">
+                                                <div className="w-24 text-[11px] font-bold text-gray-700 truncate text-right" title={item.type}>
+                                                    {item.type}
+                                                </div>
+                                                <div className="flex-1 flex items-center">
+                                                    <div className="h-5 flex items-center transition-all duration-500" style={{ width: `${widthPct}%` }}>
+                                                        <div className="h-3.5 flex-1 bg-[#5C1A0B] rounded-l-sm" />
+                                                        <div
+                                                            className="w-0 h-0"
+                                                            style={{ borderTop: '10px solid transparent', borderBottom: '10px solid transparent', borderLeft: '12px solid #5C1A0B' }}
+                                                        />
+                                                    </div>
+                                                    <span className="ml-2 text-[11px] font-extrabold text-[#4E1609] whitespace-nowrap">
+                                                        {formatCompact(item.profit, currencySymbol)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                            <div className="lg:col-span-5 bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6]">
+                                <h3 className="text-xs font-extrabold text-[#4E1609] uppercase tracking-wider mb-3 text-center">
+                                    Expense Breakdown % (3D Gauges)
+                                </h3>
+                                <div className="grid grid-cols-4 gap-3 pt-1">
+                                    {expenseCylinders.map((cyl) => (
+                                        <div key={cyl.label} className="flex flex-col items-center">
+                                            <div className="w-12 h-28 rounded-2xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-300 border border-gray-300 relative overflow-hidden flex items-end shadow-inner">
+                                                <div
+                                                    className="w-full transition-all duration-500 relative"
+                                                    style={{ height: `${Math.max(8, cyl.pct)}%`, background: `linear-gradient(90deg, ${cyl.color}CC 0%, ${cyl.color} 50%, ${cyl.color}DD 100%)` }}
+                                                >
+                                                    <div className="w-full h-2 rounded-full bg-white/30 -mt-1" />
+                                                </div>
+                                                <span className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-gray-900 drop-shadow-sm">
+                                                    {cyl.pct}%
+                                                </span>
+                                            </div>
+                                            <span className="text-[11px] font-extrabold text-[#4E1609] mt-1.5">{cyl.label}</span>
+                                            <span className="text-[10px] text-gray-500">{formatCompact(cyl.amount, currencySymbol)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-7 bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6] flex flex-col justify-between">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-xs font-extrabold text-[#4E1609] uppercase tracking-wider">Income vs. Expenses Trend</h3>
+                                    <div className="flex items-center gap-3 text-[10px] font-bold">
+                                        <span className="flex items-center gap-1 text-[#4E8B31]">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-[#4E8B31]" /> Income
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[#8B2610]">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-[#8B2610]" /> Expense
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="h-36 flex items-end gap-2 pt-4">
+                                    {monthlySeries.map((m) => {
+                                        const maxVal = Math.max(1, ...monthlySeries.map((x) => Math.max(x.income, x.expense)));
+                                        const incH = Math.round((m.income / maxVal) * 100);
+                                        const expH = Math.round((m.expense / maxVal) * 100);
+                                        return (
+                                            <div key={m.month} className="flex-1 flex flex-col items-center h-full justify-end">
+                                                <div className="w-full flex items-end justify-center gap-0.5 h-full">
+                                                    <div title={`${m.month} Income: ${formatMoney(m.income, currencySymbol)}`} className="w-2 bg-[#4E8B31] rounded-t" style={{ height: `${m.income > 0 ? Math.max(6, incH) : 3}%` }} />
+                                                    <div title={`${m.month} Expense: ${formatMoney(m.expense, currencySymbol)}`} className="w-2 bg-[#8B2610] rounded-t" style={{ height: `${m.expense > 0 ? Math.max(6, expH) : 3}%` }} />
+                                                </div>
+                                                <span className="text-[9px] font-bold text-gray-600 mt-1">{m.month}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RIGHT-HAND DEEP MAROON INTERACTIVE SLICER SIDEBAR */}
+                    <aside className="w-full xl:w-56 bg-[#4E1609] text-white rounded-2xl p-4 shadow-lg border-2 border-[#7A2917] shrink-0 space-y-4 no-print">
+                        <div className="flex items-center justify-between border-b border-[#7A2917] pb-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-[#F5B942] flex items-center gap-1.5">
+                                <Filter className="w-3.5 h-3.5" /> Slicers
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => { setSelectedYear('All'); setSelectedMonth('All'); setSelectedType('All'); setSelectedVehicle('All'); setReportTab('all'); }}
+                                className="text-[10px] font-bold text-[#FAD8C8] hover:text-white underline"
+                            >
+                                Reset
+                            </button>
+                        </div>
+
+                        <div>
+                            <div className="text-[11px] font-bold text-[#FAD8C8] mb-1.5">Year</div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {availableYears.map((yr) => (
+                                    <button
+                                        key={yr}
+                                        type="button"
+                                        onClick={() => setSelectedYear(yr)}
+                                        className={`py-1.5 px-2 rounded-lg text-xs font-extrabold transition ${selectedYear === yr ? 'bg-[#FAD8C8] text-[#4E1609] shadow' : 'bg-[#6B1D0E] text-[#FFF3ED] hover:bg-[#822614]'}`}
+                                    >
+                                        {yr}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[11px] font-bold text-[#FAD8C8] mb-1.5">Month</div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedMonth('All')}
+                                className={`w-full mb-1.5 py-1 rounded-lg text-xs font-extrabold transition ${selectedMonth === 'All' ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-[#FFF3ED] hover:bg-[#822614]'}`}
+                            >
+                                All Months
+                            </button>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {MONTHS.map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => setSelectedMonth(m)}
+                                        className={`py-1 px-2 rounded-lg text-xs font-bold transition ${selectedMonth === m ? 'bg-[#FAD8C8] text-[#4E1609] shadow' : 'bg-[#6B1D0E] text-[#FFF3ED] hover:bg-[#822614]'}`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[11px] font-bold text-[#FAD8C8] mb-1.5">Trip Type</div>
+                            <div className="space-y-1">
+                                {['All', ...TRIP_TYPES].map((t) => (
+                                    <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setSelectedType(t)}
+                                        className={`w-full text-left py-1.5 px-2.5 rounded-lg text-xs font-bold truncate transition ${selectedType === t ? 'bg-[#FAD8C8] text-[#4E1609] shadow' : 'bg-[#6B1D0E] text-[#FFF3ED] hover:bg-[#822614]'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="text-[11px] font-bold text-[#FAD8C8] mb-1.5">Vehicle</div>
+                            <div className="space-y-1">
+                                {availableVehicles.map((v) => (
+                                    <button
+                                        key={v}
+                                        type="button"
+                                        onClick={() => setSelectedVehicle(v)}
+                                        className={`w-full text-left py-1.5 px-2.5 rounded-lg text-xs font-bold truncate transition ${selectedVehicle === v ? 'bg-[#FAD8C8] text-[#4E1609] shadow' : 'bg-[#6B1D0E] text-[#FFF3ED] hover:bg-[#822614]'}`}
+                                    >
+                                        {v}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // 3. TRIP HISTORY & EXCEL EXPORT VIEW
+        // ========================================================================
+        function TripHistoryView({ trips, expenses, currencySymbol, user, userEmail, onEditTrip }) {
+            const [searchQuery, setSearchQuery] = useState('');
+            const [typeFilter, setTypeFilter] = useState('All');
+            const [dateFilter, setDateFilter] = useState('');
+            const [sortBy, setSortBy] = useState('date-desc');
+
+            const filtered = useMemo(() => {
+                return trips
+                    .filter((t) => {
+                        if (typeFilter !== 'All' && t.tripType !== typeFilter) return false;
+                        if (dateFilter && t.date !== dateFilter) return false;
+                        if (searchQuery.trim()) {
+                            const q = searchQuery.toLowerCase();
+                            const match =
+                                (t.title || '').toLowerCase().includes(q) ||
+                                (t.client || '').toLowerCase().includes(q) ||
+                                (t.vehicle || '').toLowerCase().includes(q) ||
+                                (t.destination || '').toLowerCase().includes(q);
+                            if (!match) return false;
+                        }
+                        return true;
+                    })
+                    .sort((a, b) => {
+                        if (sortBy === 'date-desc') return (b.date || '').localeCompare(a.date || '');
+                        if (sortBy === 'income-desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+                        if (sortBy === 'profit-desc') return (Number(b.netProfit) || 0) - (Number(a.netProfit) || 0);
+                        if (sortBy === 'expense-desc') return (Number(b.totalExpenses) || 0) - (Number(a.totalExpenses) || 0);
+                        return 0;
+                    });
+            }, [trips, typeFilter, dateFilter, searchQuery, sortBy]);
+
+            const handleDelete = async (tripId) => {
+                if (!window.confirm('Delete this trip record permanently?')) return;
+                try {
+                    await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'trips', tripId));
+                } catch (err) {
+                    alert('Delete failed: ' + err.message);
+                }
+            };
+
+            return (
+                <div className="space-y-4">
+                    <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 border-b-4 border-[#E5A93C]">
+                        <div>
+                            <h2 className="text-lg font-black">Trip History & Search</h2>
+                            <p className="text-xs text-[#FAD8C8]">{filtered.length} matching records in your cloud database</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => exportToExcelWorkbook({ trips: filtered, expenses, currencySymbol, periodLabel: 'Filtered_History', userEmail })}
+                            className="px-4 py-2 rounded-xl bg-[#5E8C31] hover:bg-[#4D7526] text-white text-xs font-extrabold flex items-center gap-2 shadow"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" />
+                            Download Excel (.xls)
+                        </button>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-[#E2B8A6] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="relative">
+                            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search client, title, vehicle..."
+                                className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900"
+                            />
+                        </div>
+                        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900">
+                            <option value="All">All Trip Types</option>
+                            {TRIP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="px-3 py-2 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-3 py-2 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900">
+                            <option value="date-desc">Sort: Latest Date</option>
+                            <option value="profit-desc">Sort: Highest Profit</option>
+                            <option value="income-desc">Sort: Highest Income</option>
+                            <option value="expense-desc">Sort: Highest Expenses</option>
+                        </select>
+                    </div>
+
+                    {filtered.length === 0 ? (
+                        <div className="bg-white rounded-2xl p-10 text-center border border-[#E2B8A6]">
+                            <p className="text-sm font-bold text-[#4E1609]">No trip records found.</p>
+                            <p className="text-xs text-gray-500 mt-1">Record your first trip or clear your search filters.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {filtered.map((trip) => (
+                                <div key={trip.id} className="bg-white rounded-2xl p-4 shadow-sm border border-[#E2B8A6] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#4E1609] text-[#F5B942]">{trip.tripType}</span>
+                                            <span className="text-xs font-bold text-gray-500">{trip.date}</span>
+                                            {trip.vehicle && <span className="text-xs font-semibold text-[#8B2610] bg-[#FFF3ED] px-2 py-0.5 rounded-md">{trip.vehicle}</span>}
+                                        </div>
+                                        <h3 className="text-base font-black text-[#2B120B]">{trip.title}</h3>
+                                        <p className="text-xs text-gray-600">
+                                            Client: <strong>{trip.client || 'N/A'}</strong>
+                                            {(trip.startLocation || trip.destination) && <> • Route: {trip.startLocation || 'Start'} → {trip.destination || 'End'}</>}
+                                        </p>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-4 justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-gray-100">
+                                        <div className="text-right">
+                                            <div className="text-[10px] uppercase font-bold text-gray-400">Income</div>
+                                            <div className="text-sm font-extrabold text-gray-900">{formatMoney(trip.price, currencySymbol)}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] uppercase font-bold text-gray-400">Expenses</div>
+                                            <div className="text-sm font-extrabold text-[#8B2610]">{formatMoney(trip.totalExpenses, currencySymbol)}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] uppercase font-bold text-gray-400">Net Profit</div>
+                                            <div className={`text-sm font-black ${(Number(trip.netProfit) || 0) >= 0 ? 'text-[#4E8B31]' : 'text-red-600'}`}>
+                                                {formatMoney(trip.netProfit, currencySymbol)}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5">
+                                            <button type="button" onClick={() => onEditTrip(trip)} className="p-2 rounded-xl bg-[#FFF3ED] hover:bg-[#FAD8C8] text-[#4E1609]" title="Edit Trip">
+                                                <Edit3 className="w-4 h-4" />
+                                            </button>
+                                            <button type="button" onClick={() => handleDelete(trip.id)} className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700" title="Delete Trip">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // 4. STANDALONE EXPENSES VIEW
+        // ========================================================================
+        function ExpensesView({ expenses, currencySymbol, user, defaultVehicle }) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const [title, setTitle] = useState('');
+            const [category, setCategory] = useState('Vehicle Maintenance');
+            const [amount, setAmount] = useState('');
+            const [date, setDate] = useState(todayStr);
+            const [vehicle, setVehicle] = useState(defaultVehicle || '');
+            const [notes, setNotes] = useState('');
+            const [saving, setSaving] = useState(false);
+
+            const handleAddExpense = async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                try {
+                    await addDoc(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'expenses'), {
+                        title: title.trim() || category,
+                        category,
+                        amount: parseFloat(amount) || 0,
+                        date,
+                        vehicle: vehicle.trim() || 'Primary Vehicle',
+                        notes: notes.trim(),
+                        createdAt: serverTimestamp()
+                    });
+                    setTitle('');
+                    setAmount('');
+                    setNotes('');
+                } catch (err) {
+                    alert('Error adding expense: ' + err.message);
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const handleDelete = async (id) => {
+                if (!window.confirm('Delete this expense record?')) return;
+                await deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'expenses', id));
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto space-y-5">
+                    <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl border-b-4 border-[#E5A93C]">
+                        <h2 className="text-lg font-black">Standalone Expense Manager</h2>
+                        <p className="text-xs text-[#FAD8C8]">Record maintenance, oil changes, parking, or tolls not tied to a single trip.</p>
+                    </div>
+
+                    <form onSubmit={handleAddExpense} className="bg-white p-5 rounded-2xl shadow-sm border border-[#E2B8A6] space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Category *</label>
+                                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900">
+                                    {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Amount ({currencySymbol}) *</label>
+                                <input type="number" step="any" min="0" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base font-bold text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Date *</label>
+                                <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Description *</label>
+                                <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Synthetic Engine Oil & Filter" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Vehicle</label>
+                                <input type="text" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Vehicle name / plate" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                            </div>
+                        </div>
+
+                        <button type="submit" disabled={saving} className="px-6 py-3 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-bold text-sm shadow">
+                            {saving ? 'Saving...' : '+ Add Expense'}
+                        </button>
+                    </form>
+
+                    <div className="space-y-2.5">
+                        {expenses.map((exp) => (
+                            <div key={exp.id} className="bg-white p-4 rounded-2xl border border-[#E2B8A6] flex items-center justify-between">
+                                <div>
+                                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#FFF3ED] text-[#4E1609]">{exp.category}</span>
+                                    <span className="text-xs text-gray-500 ml-2">{exp.date}</span>
+                                    <h4 className="text-sm font-bold text-gray-900 mt-1">{exp.title}</h4>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-black text-[#8B2610]">{formatMoney(exp.amount, currencySymbol)}</span>
+                                    <button type="button" onClick={() => handleDelete(exp.id)} className="p-2 rounded-xl bg-red-50 text-red-700 hover:bg-red-100">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // 5. SETTINGS & EXCEL EXPORT VIEW
+        // ========================================================================
+        function SettingsView({ user, preferences, onSavePreferences, trips, expenses }) {
+            const [currencyCode, setCurrencyCode] = useState(preferences.currencyCode || 'PKR');
+            const [defaultVehicle, setDefaultVehicle] = useState(preferences.defaultVehicle || '');
+            const [businessName, setBusinessName] = useState(preferences.businessName || '');
+            const [savedMsg, setSavedMsg] = useState('');
+
+            useEffect(() => {
+                setCurrencyCode(preferences.currencyCode || 'PKR');
+                setDefaultVehicle(preferences.defaultVehicle || '');
+                setBusinessName(preferences.businessName || '');
+            }, [preferences]);
+
+            const selectedCurr = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                await onSavePreferences({
+                    currencyCode: selectedCurr.code,
+                    currencySymbol: selectedCurr.symbol,
+                    defaultVehicle: defaultVehicle.trim(),
+                    businessName: businessName.trim()
+                });
+                setSavedMsg('Settings saved to your cloud profile!');
+                setTimeout(() => setSavedMsg(''), 3000);
+            };
+
+            return (
+                <div className="max-w-3xl mx-auto space-y-5">
+                    <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl border-b-4 border-[#E5A93C]">
+                        <h2 className="text-lg font-black">Workspace & Country Currency Settings</h2>
+                        <p className="text-xs text-[#FAD8C8]">Customize your currency, default vehicle, and download full Excel backups</p>
+                    </div>
+
+                    {savedMsg && (
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" /> {savedMsg}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl shadow-sm border border-[#E2B8A6] space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1.5 flex items-center gap-1.5">
+                                <Globe className="w-4 h-4" /> Select Your Country Currency
+                            </label>
+                            <select value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base font-bold text-gray-900">
+                                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.name} — Symbol: {c.symbol}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1.5">Default Vehicle Name / Plate Number</label>
+                            <input type="text" value={defaultVehicle} onChange={(e) => setDefaultVehicle(e.target.value)} placeholder="e.g. Honda Civic (ISB-452)" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1.5">Fleet / Company Header Name (Optional)</label>
+                            <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="e.g. Hayat Executive Transport" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-base text-gray-900" />
+                        </div>
+
+                        <button type="submit" className="px-6 py-3 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-bold text-sm shadow">
+                            Save Preferences
+                        </button>
+                    </form>
+
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#E2B8A6] space-y-3">
+                        <h3 className="text-sm font-black text-[#4E1609] uppercase">Download Cloud Data to Microsoft Excel (.xls)</h3>
+                        <p className="text-xs text-gray-600">
+                            Your data is stored privately in your cloud account (<strong>{user.email}</strong>). Export a formatted 3-sheet Excel workbook anytime:
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => exportToExcelWorkbook({ trips, expenses, currencySymbol: selectedCurr.symbol, periodLabel: 'Complete_All_Time', userEmail: user.email })}
+                            className="px-4 py-2.5 rounded-xl bg-[#5E8C31] hover:bg-[#4D7526] text-white text-xs font-extrabold flex items-center gap-2 shadow"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" />
+                            Export All-Time Excel Workbook
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // ========================================================================
+        // MAIN ROOT APPLICATION
+        // ========================================================================
+        function App() {
+            const [user, setUser] = useState(null);
+            const [authReady, setAuthReady] = useState(false);
+            const [activeTab, setActiveTab] = useState('record');
+            const [trips, setTrips] = useState([]);
+            const [expenses, setExpenses] = useState([]);
+            const [editingTrip, setEditingTrip] = useState(null);
+            const [toast, setToast] = useState('');
+            const [preferences, setPreferences] = useState({
+                currencyCode: 'PKR',
+                currencySymbol: 'Rs.',
+                defaultVehicle: '',
+                businessName: ''
+            });
+
+            useEffect(() => {
+                const manifest = {
+                    name: 'DRIVE DATA — Transport Management',
+                    short_name: 'DRIVE DATA',
+                    start_url: '.',
+                    display: 'standalone',
+                    background_color: '#FAD8C8',
+                    theme_color: '#4E1609'
+                };
+                const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+                const manifestUrl = URL.createObjectURL(blob);
+                const link = document.createElement('link');
+                link.rel = 'manifest';
+                link.href = manifestUrl;
+                document.head.appendChild(link);
+                return () => {
+                    document.head.removeChild(link);
+                    URL.revokeObjectURL(manifestUrl);
+                };
+            }, []);
+
+            useEffect(() => {
+                const unsub = onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                    setAuthReady(true);
+                });
+                return () => unsub();
+            }, []);
+
+            useEffect(() => {
+                if (!user) {
+                    setTrips([]);
+                    setExpenses([]);
+                    return;
+                }
+                const unsubTrips = onSnapshot(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'trips'), (snap) => {
+                    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+                    list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+                    setTrips(list);
+                });
+                const unsubExp = onSnapshot(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'expenses'), (snap) => {
+                    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+                    list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+                    setExpenses(list);
+                });
+                const unsubPref = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'preferences'), (snap) => {
+                    if (snap.exists()) setPreferences((prev) => ({ ...prev, ...snap.data() }));
+                });
+                return () => { unsubTrips(); unsubExp(); unsubPref(); };
+            }, [user]);
+
+            const handleSavePreferences = async (newPrefs) => {
+                if (!user) return;
+                setPreferences((prev) => ({ ...prev, ...newPrefs }));
+                await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'preferences'), newPrefs, { merge: true });
+            };
+
+            const showToast = (msg) => {
+                setToast(msg);
+                setTimeout(() => setToast(''), 3200);
+            };
+
+            if (!authReady) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-[#FAD8C8]">
+                        <div className="flex flex-col items-center gap-3">
+                            <CarLogo3D size="lg" />
+                            <p className="text-sm font-black text-[#4E1609] tracking-wider">LOADING DRIVE DATA...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) return <AuthScreen />;
+
+            const navItems = [
+                { id: 'record', label: 'Record Trip', icon: PlusCircle },
+                { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+                { id: 'history', label: 'Trip History', icon: History },
+                { id: 'expenses', label: 'Expenses', icon: Receipt },
+                { id: 'settings', label: 'Settings', icon: Settings }
+            ];
+
+            return (
+                <div className="min-h-screen pb-24 md:pb-8 bg-[#FAD8C8]">
+                    <header className="bg-[#4E1609] text-white sticky top-0 z-30 shadow-lg border-b-2 border-[#E5A93C] no-print">
+                        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <CarLogo3D size="sm" />
+                                <div>
+                                    <span className="text-base md:text-lg font-black tracking-wider text-[#FFF6E5] block leading-none">
+                                        {preferences.businessName || 'DRIVE DATA'}
+                                    </span>
+                                    <span className="text-[10px] text-[#F5B942] font-semibold">
+                                        {user.displayName || user.email}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <nav className="hidden md:flex items-center gap-1.5">
+                                {navItems.map((item) => {
+                                    const Icon = item.icon;
+                                    const active = activeTab === item.id;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => { if (item.id !== 'record') setEditingTrip(null); setActiveTab(item.id); }}
+                                            className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition ${active ? 'bg-[#FAD8C8] text-[#4E1609] shadow' : 'text-[#FAD8C8] hover:bg-[#6B1D0E] hover:text-white'}`}
+                                        >
+                                            <Icon className="w-4 h-4" />
+                                            {item.label}
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+
+                            <button
+                                type="button"
+                                onClick={() => signOut(auth)}
+                                className="px-3 py-2 rounded-xl bg-[#6B1D0E] hover:bg-red-800 text-[#FAD8C8] hover:text-white text-xs font-bold flex items-center gap-1.5 transition"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                <span className="hidden sm:inline">Logout</span>
+                            </button>
+                        </div>
+                    </header>
+
+                    {toast && (
+                        <div className="fixed top-16 right-4 z-50 bg-[#4E8B31] text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-extrabold flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" /> {toast}
+                        </div>
+                    )}
+
+                    <main className="max-w-7xl mx-auto px-3 sm:px-5 pt-5">
+                        {activeTab === 'record' && (
+                            <RecordTripView
+                                user={user}
+                                currencySymbol={preferences.currencySymbol}
+                                defaultVehicle={preferences.defaultVehicle}
+                                editingTrip={editingTrip}
+                                onCancelEdit={() => setEditingTrip(null)}
+                                onSaved={(msg) => { setEditingTrip(null); showToast(msg); }}
+                            />
+                        )}
+                        {activeTab === 'dashboard' && (
+                            <DashboardView trips={trips} expenses={expenses} currencySymbol={preferences.currencySymbol} userEmail={user.email} />
+                        )}
+                        {activeTab === 'history' && (
+                            <TripHistoryView
+                                trips={trips}
+                                expenses={expenses}
+                                currencySymbol={preferences.currencySymbol}
+                                user={user}
+                                userEmail={user.email}
+                                onEditTrip={(trip) => { setEditingTrip(trip); setActiveTab('record'); }}
+                            />
+                        )}
+                        {activeTab === 'expenses' && (
+                            <ExpensesView expenses={expenses} currencySymbol={preferences.currencySymbol} user={user} defaultVehicle={preferences.defaultVehicle} />
+                        )}
+                        {activeTab === 'settings' && (
+                            <SettingsView user={user} preferences={preferences} onSavePreferences={handleSavePreferences} trips={trips} expenses={expenses} />
+                        )}
+                    </main>
+
+                    <nav className="md:hidden fixed bottom-0 inset-x-0 bg-[#4E1609] border-t-2 border-[#E5A93C] z-30 flex justify-around py-1.5 px-1 no-print">
+                        {navItems.map((item) => {
+                            const Icon = item.icon;
+                            const active = activeTab === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => { if (item.id !== 'record') setEditingTrip(null); setActiveTab(item.id); }}
+                                    className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-extrabold transition ${active ? 'bg-[#FAD8C8] text-[#4E1609]' : 'text-[#FAD8C8]'}`}
+                                >
+                                    <Icon className="w-4 h-4 mb-0.5" />
+                                    {item.label}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                </div>
+            );
+        }
+
+        createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>
