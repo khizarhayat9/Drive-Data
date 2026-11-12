@@ -7,8 +7,129 @@
   <title>DRIVE DATA — Personal Transport Management</title>
   
   <!-- Mobile App Manifest & Icons -->
-  <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22DRIVE%20DATA%20%E2%80%94%20Transport%20Management%22%2C%22short_name%22%3A%22DRIVE%20DATA%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FAD8C8%22%2C%22theme_color%22%3A%22%234E1609%22%7D">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+function DashboardView({ trips, expenses, currencySymbol, userEmail }) {
+      const [selectedYear, setSelectedYear] = useState('All');
+      const [selectedMonth, setSelectedMonth] = useState('All');
+      const [selectedType, setSelectedType] = useState('All');
+      const [selectedVehicle, setSelectedVehicle] = useState('All');
+      const [reportTab, setReportTab] = useState('all'); // 'all', 'daily', 'weekly', 'monthly'
+
+      const availableYears = useMemo(() => {
+        const yrs = new Set([String(new Date().getFullYear())]);
+        trips.forEach((t) => { if (t.date && t.date.length >= 4) yrs.add(t.date.slice(0, 4)); });
+        return ['All', ...Array.from(yrs).sort().reverse()];
+      }, [trips]);
+
+      const availableVehicles = useMemo(() => {
+        const vSet = new Set();
+        trips.forEach((t) => { if (t.vehicle) vSet.add(t.vehicle); });
+        return ['All', ...Array.from(vSet)];
+      }, [trips]);
+
+      const { filteredTrips, filteredExpenses } = useMemo(() => {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 7);
+        const currentMonthPrefix = todayStr.slice(0, 7);
+
+        const matchDate = (dateStr) => {
+          if (!dateStr) return true;
+          if (selectedYear !== 'All' && !dateStr.startsWith(selectedYear)) return false;
+          if (selectedMonth !== 'All' && dateStr.slice(5, 7) !== String(MONTHS.indexOf(selectedMonth) + 1).padStart(2, '0')) return false;
+          if (reportTab === 'daily') return dateStr === todayStr;
+          if (reportTab === 'weekly') return new Date(dateStr) >= sevenDaysAgo;
+          if (reportTab === 'monthly') return dateStr.startsWith(currentMonthPrefix);
+          return true;
+        };
+
+        return {
+          filteredTrips: trips.filter((t) => matchDate(t.date) && (selectedType === 'All' || t.tripType === selectedType) && (selectedVehicle === 'All' || t.vehicle === selectedVehicle)),
+          filteredExpenses: expenses.filter((e) => matchDate(e.date) && (selectedVehicle === 'All' || e.vehicle === selectedVehicle))
+        };
+      }, [trips, expenses, selectedYear, selectedMonth, selectedType, selectedVehicle, reportTab]);
+
+      const stats = useMemo(() => {
+        const totalIncome = filteredTrips.reduce((s, t) => s + (Number(t.price) || 0), 0);
+        const totalExpenses = filteredTrips.reduce((s, t) => s + (Number(t.totalExpenses) || 0), 0) + filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+        const netProfit = totalIncome - totalExpenses;
+        const profitMarginPct = totalIncome > 0 ? Math.max(0, Math.min(100, (netProfit / totalIncome) * 100)) : 0;
+        return { totalTrips: filteredTrips.length, totalIncome, totalExpenses, netProfit, profitMarginPct };
+      }, [filteredTrips, filteredExpenses]);
+
+      return (
+        <div className="flex flex-col xl:flex-row gap-4">
+          <div className="flex-1 space-y-4">
+            <div className="bg-[#4E1609] rounded-2xl px-5 py-3.5 text-white flex flex-wrap justify-between items-center gap-3 shadow border-b-4 border-[#E5A93C]">
+              <div>
+                <h2 className="text-lg font-black">Executive Analytics</h2>
+                <p className="text-[11px] text-[#FAD8C8]">Real-time cloud business overview</p>
+              </div>
+              <div className="flex gap-2 no-print">
+                <button type="button" onClick={() => exportToExcelWorkbook({ trips: filteredTrips, expenses: filteredExpenses, currencySymbol, periodLabel: reportTab.toUpperCase(), userEmail })} className="px-3 py-1.5 rounded-xl bg-[#5E8C31] text-white text-xs font-bold flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                </button>
+                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 rounded-xl bg-white/20 text-white text-xs font-bold flex items-center gap-1.5">
+                  <Printer className="w-4 h-4" /> Print
+                </button>
+              </div>
+            </div>
+
+            {/* Time Period Filter Tabs (Daily, Weekly, Monthly, All) */}
+            <div className="flex gap-2 bg-white p-2 rounded-2xl border shadow-sm overflow-x-auto">
+              {[
+                { id: 'all', label: 'All-Time' },
+                { id: 'daily', label: 'Today (Daily)' },
+                { id: 'weekly', label: 'Last 7 Days (Weekly)' },
+                { id: 'monthly', label: 'This Month (Monthly)' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setReportTab(tab.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${reportTab === tab.id ? 'bg-[#4E1609] text-white shadow' : 'bg-[#FFF3ED] text-[#4E1609] hover:bg-[#E8C5B5]/40'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
+                <div className="text-2xl font-black">{stats.totalTrips}</div>
+                <div className="text-xs font-bold text-[#4E1609] mt-1">Total Trips</div>
+              </div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
+                <div className="text-2xl font-black text-gray-900">{formatCompact(stats.totalIncome, currencySymbol)}</div>
+                <div className="text-xs font-bold text-[#4E1609] mt-1">Gross Income</div>
+              </div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
+                <div className="text-2xl font-black text-[#8B2610]">{formatCompact(stats.totalExpenses, currencySymbol)}</div>
+                <div className="text-xs font-bold text-[#4E1609] mt-1">Total Expenses</div>
+              </div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
+                <div className="text-2xl font-black text-[#4E8B31]">{formatCompact(stats.netProfit, currencySymbol)}</div>
+                <div className="text-xs font-bold text-[#4E1609] mt-1">Net Profit</div>
+              </div>
+            </div>
+          </div>
+
+          <aside className="w-full xl:w-56 bg-[#4E1609] text-white rounded-2xl p-4 shadow border-2 border-[#7A2917] space-y-4 no-print">
+            <div className="flex justify-between items-center border-b border-[#7A2917] pb-2">
+              <span className="text-xs font-black text-[#F5B942] flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Slicers</span>
+              <button type="button" onClick={() => { setSelectedYear('All'); setSelectedMonth('All'); setSelectedType('All'); setSelectedVehicle('All'); setReportTab('all'); }} className="text-[10px] text-[#FAD8C8] underline">Reset</button>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Year</div>
+              <div className="grid grid-cols-2 gap-1">{availableYears.map((yr) => <button key={yr} type="button" onClick={() => setSelectedYear(yr)} className={`py-1 rounded text-xs font-bold ${selectedYear === yr ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{yr}</button>)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Trip Type</div>
+              <div className="space-y-1">{['All', ...TRIP_TYPES].map((t) => <button key={t} type="button" onClick={() => setSelectedType(t)} className={`w-full text-left py-1 px-2 rounded text-xs font-bold truncate ${selectedType === t ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{t}</button>)}</div>
+            </div>
+          </aside>
+        </div>
+      );
+    }  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DRIVE DATA">
 
