@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#4E1609" />
-  <title>DRIVE DATA — Personal Transport Management</title>
+  <title>DRIVE DATA — Transport & Fleet Management</title>
   
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,7 +16,8 @@
   <style>
     @media print {
       .no-print { display: none !important; }
-      body { background: #ffffff !important; }
+      body { background: #ffffff !important; color: #000000 !important; }
+      .print-container { width: 100% !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; }
     }
   </style>
   <script>
@@ -79,14 +80,19 @@
       Search,
       Trash2,
       Edit3,
-      FileSpreadsheet,
       Printer,
       Filter,
       CheckCircle2,
       AlertCircle,
       Eye,
       EyeOff,
-      Download
+      Download,
+      Building2,
+      Truck,
+      Briefcase,
+      ArrowRightLeft,
+      Calendar,
+      FileText
     } from 'https://esm.sh/lucide-react@0.454.0?deps=react@18.3.1';
 
     const firebaseConfig = {
@@ -191,10 +197,7 @@
       );
     }
 
-    function exportToExcelWorkbook({ trips, expenses, currencySymbol, periodLabel, userEmail }) {
-      const escapeXml = (str) =>
-        String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
+    function generateDriverPDF({ trips, expenses, currencySymbol, periodLabel, userEmail, businessName }) {
       const totalIncome = trips.reduce((s, t) => s + (Number(t.price) || 0), 0);
       const totalFuel = trips.reduce((s, t) => s + (Number(t.fuel) || 0), 0);
       const totalMeals = trips.reduce((s, t) => s + (Number(t.meals) || 0), 0);
@@ -203,105 +206,129 @@
       const totalExpenses = totalFuel + totalMeals + totalTripOther + standaloneTotal;
       const netProfit = totalIncome - totalExpenses;
 
-      const tripRowsXml = trips.map((t) => `
-        <Row>
-          <Cell><Data ss:Type="String">${escapeXml(t.date)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.title)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.tripType)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.client)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.vehicle)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.startLocation)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.destination)}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.price) || 0}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.fuel) || 0}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.meals) || 0}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.other) || 0}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.totalExpenses) || 0}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(t.netProfit) || 0}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(t.notes)}</Data></Cell>
-        </Row>`).join('');
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Driver Financial Report - ${periodLabel}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111; padding: 20px; font-size: 12px; }
+            h1 { color: #4E1609; margin-bottom: 5px; font-size: 20px; }
+            .meta { color: #555; margin-bottom: 20px; font-size: 11px; }
+            .summary-box { display: flex; gap: 15px; margin-bottom: 25px; }
+            .card { border: 1px solid #ddd; padding: 10px 15px; border-radius: 6px; flex: 1; background: #fafafa; }
+            .card h3 { margin: 0; font-size: 10px; color: #666; text-transform: uppercase; }
+            .card p { margin: 5px 0 0; font-size: 16px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+            th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+            th { background: #4E1609; color: #fff; }
+            .text-right { text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>${businessName || 'DRIVE DATA'} - Driver Report</h1>
+          <div class="meta">Period: <b>${periodLabel}</b> | Account: ${userEmail} | Generated: ${new Date().toLocaleDateString()}</div>
+          
+          <div class="summary-box">
+            <div class="card"><h3>Total Trips</h3><p>${trips.length}</p></div>
+            <div class="card"><h3>Gross Income</h3><p>${formatMoney(totalIncome, currencySymbol)}</p></div>
+            <div class="card"><h3>Total Expenses</h3><p>${formatMoney(totalExpenses, currencySymbol)}</p></div>
+            <div class="card"><h3>Net Profit</h3><p>${formatMoney(netProfit, currencySymbol)}</p></div>
+          </div>
 
-      const expenseRowsXml = expenses.map((e) => `
-        <Row>
-          <Cell><Data ss:Type="String">${escapeXml(e.date)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(e.category)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(e.title)}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(e.vehicle)}</Data></Cell>
-          <Cell><Data ss:Type="Number">${Number(e.amount) || 0}</Data></Cell>
-          <Cell><Data ss:Type="String">${escapeXml(e.notes)}</Data></Cell>
-        </Row>`).join('');
+          <h3>Trip Records</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Title</th><th>Type</th><th>Client</th><th>Vehicle</th><th class="text-right">Income</th><th class="text-right">Expenses</th><th class="text-right">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${trips.map(t => `
+                <tr>
+                  <td>${t.date}</td>
+                  <td>${t.title}</td>
+                  <td>${t.tripType}</td>
+                  <td>${t.client}</td>
+                  <td>${t.vehicle}</td>
+                  <td class="text-right">${formatMoney(t.price, currencySymbol)}</td>
+                  <td class="text-right">${formatMoney(t.totalExpenses, currencySymbol)}</td>
+                  <td class="text-right"><b>${formatMoney(t.netProfit, currencySymbol)}</b></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 500);
+    }
 
-      const xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#4E1609" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="14" ss:Color="#4E1609"/></Style>
- </Styles>
- <Worksheet ss:Name="Executive Summary">
-  <Table>
-   <Row><Cell ss:StyleID="Title"><Data ss:Type="String">DRIVE DATA — Transport Financial Report (${escapeXml(periodLabel)})</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Account: ${escapeXml(userEmail)} | Currency: ${escapeXml(currencySymbol)} | Generated: ${new Date().toLocaleDateString()}</Data></Cell></Row>
-   <Row></Row>
-   <Row><Cell ss:StyleID="Header"><Data ss:Type="String">Metric</Data></Cell><Cell ss:StyleID="Header"><Data ss:Type="String">Value</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Total Completed Trips</Data></Cell><Cell><Data ss:Type="Number">${trips.length}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Gross Trip Income</Data></Cell><Cell><Data ss:Type="Number">${totalIncome}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Trip Fuel Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalFuel}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Trip Meal Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalMeals}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Other Trip Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalTripOther}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Standalone Vehicle/Ops Expenses</Data></Cell><Cell><Data ss:Type="Number">${standaloneTotal}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Total Combined Expenses</Data></Cell><Cell><Data ss:Type="Number">${totalExpenses}</Data></Cell></Row>
-   <Row><Cell><Data ss:Type="String">Net Profit</Data></Cell><Cell><Data ss:Type="Number">${netProfit}</Data></Cell></Row>
-  </Table>
- </Worksheet>
- <Worksheet ss:Name="Trip Records">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Date</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Trip Title</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Trip Type</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Client / Org</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Vehicle</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">From</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">To</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Income</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Fuel</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Meals</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Other</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Total Expenses</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Net Profit</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Notes</Data></Cell>
-   </Row>
-   ${tripRowsXml}
-  </Table>
- </Worksheet>
- <Worksheet ss:Name="Standalone Expenses">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Date</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Category</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Description</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Vehicle</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Amount</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Notes</Data></Cell>
-   </Row>
-   ${expenseRowsXml}
-  </Table>
- </Worksheet>
-</Workbook>`;
+    function generateProviderPDF({ transactions, currencySymbol, periodLabel, userEmail, businessName }) {
+      const totalSales = transactions.reduce((s, t) => s + (Number(t.saleRate) || 0), 0);
+      const totalPurchases = transactions.reduce((s, t) => s + (Number(t.purchaseRate) || 0), 0);
 
-      const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `DRIVE_DATA_${periodLabel.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xls`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Provider Financial Report - ${periodLabel}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111; padding: 20px; font-size: 12px; }
+            h1 { color: #4E1609; margin-bottom: 5px; font-size: 20px; }
+            .meta { color: #555; margin-bottom: 20px; font-size: 11px; }
+            .summary-box { display: flex; gap: 15px; margin-bottom: 25px; }
+            .card { border: 1px solid #ddd; padding: 10px 15px; border-radius: 6px; flex: 1; background: #fafafa; }
+            .card h3 { margin: 0; font-size: 10px; color: #666; text-transform: uppercase; }
+            .card p { margin: 5px 0 0; font-size: 16px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+            th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+            th { background: #4E1609; color: #fff; }
+            .text-right { text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>${businessName || 'DRIVE DATA'} - Provider B2B Report</h1>
+          <div class="meta">Period: <b>${periodLabel}</b> | Account: ${userEmail} | Generated: ${new Date().toLocaleDateString()}</div>
+          
+          <div class="summary-box">
+            <div class="card"><h3>Total Transactions</h3><p>${transactions.length}</p></div>
+            <div class="card"><h3>Total Sales</h3><p>${formatMoney(totalSales, currencySymbol)}</p></div>
+            <div class="card"><h3>Total Purchases</h3><p>${formatMoney(totalPurchases, currencySymbol)}</p></div>
+          </div>
+
+          <h3>Provider Transactions</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Title</th><th>Type</th><th>Client / Org</th><th>Provider</th><th>Vehicle</th><th class="text-right">Sale Rate</th><th class="text-right">Purchase Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${transactions.map(t => `
+                <tr>
+                  <td>${t.date}</td>
+                  <td>${t.title}</td>
+                  <td>${t.tripType}</td>
+                  <td>${t.client}</td>
+                  <td>${t.providerName || 'N/A'}</td>
+                  <td>${t.vehicle}</td>
+                  <td class="text-right">${formatMoney(t.saleRate, currencySymbol)}</td>
+                  <td class="text-right">${formatMoney(t.purchaseRate, currencySymbol)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 500);
     }
 
     function AuthScreen() {
@@ -315,381 +342,193 @@
       const [message, setMessage] = useState('');
 
       const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setMessage('');
-        setLoading(true);
+        e.preventDefault(); setError(''); setMessage(''); setLoading(true);
         try {
-          if (mode === 'login') {
-            await signInWithEmailAndPassword(auth, email.trim(), password);
-          } else if (mode === 'register') {
+          if (mode === 'login') await signInWithEmailAndPassword(auth, email.trim(), password);
+          else if (mode === 'register') {
             const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
             if (fullName.trim()) await updateProfile(cred.user, { displayName: fullName.trim() });
           } else if (mode === 'reset') {
             await sendPasswordResetEmail(auth, email.trim());
             setMessage('Password recovery link sent! Check your email inbox.');
           }
-        } catch (err) {
-          setError(err?.message || 'Authentication failed.');
-        } finally {
-          setLoading(false);
-        }
+        } catch (err) { setError(err?.message || 'Authentication failed.'); } finally { setLoading(false); }
       };
-
       const handleGoogleLogin = async () => {
-        setError('');
-        setLoading(true);
-        try {
-          await signInWithPopup(auth, googleProvider);
-        } catch (err) {
-          if (err?.code !== 'auth/popup-closed-by-user') setError(err?.message || 'Google Sign-In failed.');
-        } finally {
-          setLoading(false);
-        }
+        setError(''); setLoading(true);
+        try { await signInWithPopup(auth, googleProvider); } 
+        catch (err) { if (err?.code !== 'auth/popup-closed-by-user') setError(err?.message || 'Google Sign-In failed.'); } 
+        finally { setLoading(false); }
       };
 
       return (
         <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #FAD8C8 0%, #F4BFA8 50%, #E89E82 100%)' }}>
           <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-[#4E1609]/20">
-            <div className="bg-[#4E1609] px-7 py-6 text-white flex items-center gap-4 border-b-4 border-[#E5A93C]">
-              <CarLogo3D size="lg" />
-              <div>
-                <h1 className="text-2xl font-black tracking-wider text-[#FFF6E5]">DRIVE DATA</h1>
-                <p className="text-xs text-[#F7C96B] font-medium mt-0.5">Cloud Transport & Fleet Analytics</p>
-              </div>
-            </div>
+            <div className="bg-[#4E1609] px-7 py-6 text-white flex items-center gap-4 border-b-4 border-[#E5A93C]"><CarLogo3D size="lg" /><div><h1 className="text-2xl font-black tracking-wider text-[#FFF6E5]">DRIVE DATA</h1><p className="text-xs text-[#F7C96B] font-medium mt-0.5">Cloud Transport & Fleet Analytics</p></div></div>
             <div className="p-7">
-              <div className="flex gap-2 bg-[#FFF3ED] p-1.5 rounded-xl mb-6 border border-[#E8C5B5]">
-                <button type="button" onClick={() => { setMode('login'); setError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'login' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609]'}`}>Sign In</button>
-                <button type="button" onClick={() => { setMode('register'); setError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'register' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609]'}`}>Create Account</button>
-              </div>
+              <div className="flex gap-2 bg-[#FFF3ED] p-1.5 rounded-xl mb-6 border border-[#E8C5B5]"><button type="button" onClick={() => { setMode('login'); setError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'login' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609]'}`}>Sign In</button><button type="button" onClick={() => { setMode('register'); setError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${mode === 'register' ? 'bg-[#4E1609] text-white shadow' : 'text-[#4E1609]'}`}>Create Account</button></div>
               {error && <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2"><AlertCircle className="w-4 h-4 shrink-0 text-red-600" /><span>{error}</span></div>}
               {message && <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" /><span>{message}</span></div>}
               <form onSubmit={handleSubmit} className="space-y-4">
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">Driver / Owner Name</label>
-                    <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Khizar Hayat" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]" />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">Email Address</label>
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="driver@example.com" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]" />
-                </div>
-                {mode !== 'reset' && (
-                  <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider">Password</label>
-                      {mode === 'login' && <button type="button" onClick={() => setMode('reset')} className="text-xs font-semibold text-[#8B2610] hover:underline">Forgot?</button>}
-                    </div>
-                    <div className="relative">
-                      <input type={showPass ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full px-4 py-3 pr-11 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-[#4E1609]" />
-                      <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">{showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
-                    </div>
-                  </div>
-                )}
-                <button type="submit" disabled={loading} className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-bold text-sm shadow-lg transition">
-                  {loading ? 'Connecting...' : mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Send Recovery Link'}
-                </button>
+                {mode === 'register' && <div><label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">Full Name</label><input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Khizar Hayat" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] focus:outline-none focus:ring-2 focus:ring-[#4E1609]" /></div>}
+                <div><label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider mb-1.5">Email Address</label><input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="driver@example.com" className="w-full px-4 py-3 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] focus:outline-none focus:ring-2 focus:ring-[#4E1609]" /></div>
+                {mode !== 'reset' && (<div><div className="flex justify-between items-center mb-1.5"><label className="block text-xs font-bold text-[#4E1609] uppercase tracking-wider">Password</label>{mode === 'login' && <button type="button" onClick={() => setMode('reset')} className="text-xs font-semibold text-[#8B2610] hover:underline">Forgot?</button>}</div><div className="relative"><input type={showPass ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full px-4 py-3 pr-11 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6] focus:outline-none focus:ring-2 focus:ring-[#4E1609]" /><button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">{showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button></div></div>)}
+                <button type="submit" disabled={loading} className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-bold text-sm shadow-lg transition">{loading ? 'Connecting...' : mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Send Recovery Link'}</button>
               </form>
-              {mode !== 'reset' && (
-                <>
-                  <div className="relative my-5"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#E8C5B5]" /></div><div className="relative flex justify-center text-xs"><span className="px-3 bg-white text-gray-500">OR</span></div></div>
-                  <button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full py-3 rounded-xl border-2 border-[#4E1609]/20 bg-white hover:bg-[#FFF6F2] text-[#4E1609] font-bold text-sm flex items-center justify-center gap-3 transition">
-                    <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/></svg>
-                    Continue with Google
-                  </button>
-                </>
-              )}
+              {mode !== 'reset' && (<><div className="relative my-5"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#E8C5B5]" /></div><div className="relative flex justify-center text-xs"><span className="px-3 bg-white text-gray-500">OR</span></div></div><button type="button" onClick={handleGoogleLogin} disabled={loading} className="w-full py-3 rounded-xl border-2 border-[#4E1609]/20 bg-white hover:bg-[#FFF6F2] text-[#4E1609] font-bold text-sm flex items-center justify-center gap-3 transition"><svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/></svg> Continue with Google</button></>)}
             </div>
           </div>
         </div>
       );
     }
 
+    // ========================================================================
+    // CLASSIC DRIVER PORTAL COMPONENTS
+    // ========================================================================
     function RecordTripView({ user, currencySymbol, editingTrip, onCancelEdit, onSaved, defaultVehicle }) {
       const todayStr = new Date().toISOString().slice(0, 10);
-      const [title, setTitle] = useState('');
-      const [date, setDate] = useState(todayStr);
-      const [vehicle, setVehicle] = useState(defaultVehicle || '');
-      const [client, setClient] = useState('');
-      const [tripType, setTripType] = useState('City Trip');
-      const [startLocation, setStartLocation] = useState('');
-      const [destination, setDestination] = useState('');
-      const [price, setPrice] = useState('');
-      const [fuel, setFuel] = useState('');
-      const [meals, setMeals] = useState('');
-      const [other, setOther] = useState('');
-      const [notes, setNotes] = useState('');
-      const [saving, setSaving] = useState(false);
+      const [title, setTitle] = useState(''); const [date, setDate] = useState(todayStr); const [vehicle, setVehicle] = useState(defaultVehicle || ''); const [client, setClient] = useState(''); const [tripType, setTripType] = useState('City Trip'); const [startLocation, setStartLocation] = useState(''); const [destination, setDestination] = useState(''); const [price, setPrice] = useState(''); const [fuel, setFuel] = useState(''); const [meals, setMeals] = useState(''); const [other, setOther] = useState(''); const [notes, setNotes] = useState(''); const [saving, setSaving] = useState(false);
 
       useEffect(() => {
         if (editingTrip) {
-          setTitle(editingTrip.title || '');
-          setDate(editingTrip.date || todayStr);
-          setVehicle(editingTrip.vehicle || defaultVehicle || '');
-          setClient(editingTrip.client || '');
-          setTripType(editingTrip.tripType || 'City Trip');
-          setStartLocation(editingTrip.startLocation || '');
-          setDestination(editingTrip.destination || '');
-          setPrice(editingTrip.price ?? '');
-          setFuel(editingTrip.fuel ?? '');
-          setMeals(editingTrip.meals ?? '');
-          setOther(editingTrip.other ?? '');
-          setNotes(editingTrip.notes || '');
+          setTitle(editingTrip.title || ''); setDate(editingTrip.date || todayStr); setVehicle(editingTrip.vehicle || defaultVehicle || ''); setClient(editingTrip.client || ''); setTripType(editingTrip.tripType || 'City Trip'); setStartLocation(editingTrip.startLocation || ''); setDestination(editingTrip.destination || ''); setPrice(editingTrip.price ?? ''); setFuel(editingTrip.fuel ?? ''); setMeals(editingTrip.meals ?? ''); setOther(editingTrip.other ?? ''); setNotes(editingTrip.notes || '');
         }
       }, [editingTrip, defaultVehicle, todayStr]);
 
-      const numPrice = parseFloat(price) || 0;
-      const totalExpenses = (parseFloat(fuel) || 0) + (parseFloat(meals) || 0) + (parseFloat(other) || 0);
-      const netProfit = numPrice - totalExpenses;
+      const numPrice = parseFloat(price) || 0; const totalExpenses = (parseFloat(fuel) || 0) + (parseFloat(meals) || 0) + (parseFloat(other) || 0); const netProfit = numPrice - totalExpenses;
 
       const handleSave = async (e) => {
-        e.preventDefault();
-        setSaving(true);
+        e.preventDefault(); setSaving(true);
         try {
-          const payload = {
-            title: title.trim() || `${tripType} - ${destination || 'Trip'}`,
-            date,
-            vehicle: vehicle.trim() || 'Primary Vehicle',
-            client: client.trim() || 'Direct Client',
-            tripType,
-            startLocation: startLocation.trim(),
-            destination: destination.trim(),
-            price: numPrice,
-            fuel: parseFloat(fuel) || 0,
-            meals: parseFloat(meals) || 0,
-            other: parseFloat(other) || 0,
-            totalExpenses,
-            netProfit,
-            notes: notes.trim(),
-            updatedAt: serverTimestamp()
-          };
+          const payload = { title: title.trim() || `${tripType} - ${destination || 'Trip'}`, date, vehicle: vehicle.trim() || 'Primary Vehicle', client: client.trim() || 'Direct Client', tripType, startLocation: startLocation.trim(), destination: destination.trim(), price: numPrice, fuel: parseFloat(fuel) || 0, meals: parseFloat(meals) || 0, other: parseFloat(other) || 0, totalExpenses, netProfit, notes: notes.trim(), updatedAt: serverTimestamp() };
           const tripsRef = collection(db, 'artifacts', APP_ID, 'users', user.uid, 'trips');
-          if (editingTrip?.id) {
-            await updateDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'trips', editingTrip.id), payload);
-          } else {
-            await addDoc(tripsRef, { ...payload, createdAt: serverTimestamp() });
-          }
-          if (!editingTrip) {
-            setTitle(''); setClient(''); setStartLocation(''); setDestination(''); setPrice(''); setFuel(''); setMeals(''); setOther(''); setNotes('');
-          }
+          if (editingTrip?.id) await updateDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'trips', editingTrip.id), payload);
+          else await addDoc(tripsRef, { ...payload, createdAt: serverTimestamp() });
+          if (!editingTrip) { setTitle(''); setClient(''); setStartLocation(''); setDestination(''); setPrice(''); setFuel(''); setMeals(''); setOther(''); setNotes(''); }
           onSaved(editingTrip ? 'Trip updated!' : 'Trip recorded & synced!');
-        } catch (err) {
-          alert('Error: ' + err.message);
-        } finally {
-          setSaving(false);
-        }
+        } catch (err) { alert('Error: ' + err.message); } finally { setSaving(false); }
       };
 
       return (
         <div className="max-w-4xl mx-auto">
           <div className="bg-[#4E1609] text-white px-6 py-4 rounded-2xl mb-5 flex justify-between items-center shadow border-b-4 border-[#E5A93C]">
-            <div>
-              <h2 className="text-lg font-extrabold">{editingTrip ? 'Edit Trip' : 'Record New Transport Trip'}</h2>
-              <p className="text-xs text-[#FAD8C8]">Auto-calculates net profit • Cloud sync active</p>
-            </div>
+            <div><h2 className="text-lg font-extrabold">{editingTrip ? 'Edit Trip' : 'Record New Transport Trip'}</h2><p className="text-xs text-[#FAD8C8]">Fast & accurate driver expense tracking</p></div>
             {editingTrip && <button type="button" onClick={onCancelEdit} className="px-3 py-1.5 rounded bg-white/20 text-xs font-bold">Cancel</button>}
           </div>
-
           <form onSubmit={handleSave} className="bg-white rounded-2xl p-6 shadow-md border border-[#E2B8A6] space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Title *</label>
-                <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Airport Drop-off" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Date *</label>
-                <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Type *</label>
-                <select value={tripType} onChange={(e) => setTripType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]">
-                  {TRIP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Client / Org</label>
-                <input type="text" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Client name" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Vehicle</label>
-                <input type="text" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Vehicle number" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Pickup Location</label><input type="text" value={startLocation} onChange={(e) => setStartLocation(e.target.value)} placeholder="From" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div>
-              <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Destination</label><input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="To" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[#FFF4EE] border border-[#E8C5B5]">
-              <h3 className="text-xs font-extrabold uppercase text-[#4E1609] mb-3">Fare & Expenses ({currencySymbol})</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div><label className="block text-xs font-bold text-emerald-800 mb-1">Income *</label><input type="number" step="any" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-900" /></div>
-                <div><label className="block text-xs font-bold text-[#4E1609] mb-1">Fuel</label><input type="number" step="any" min="0" value={fuel} onChange={(e) => setFuel(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div>
-                <div><label className="block text-xs font-bold text-[#4E1609] mb-1">Meals</label><input type="number" step="any" min="0" value={meals} onChange={(e) => setMeals(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div>
-                <div><label className="block text-xs font-bold text-[#4E1609] mb-1">Tolls / Other</label><input type="number" step="any" min="0" value={other} onChange={(e) => setOther(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-[#E2B8A6] grid grid-cols-2 gap-4">
-                <div className="bg-white p-3 rounded-xl border"><span className="text-[11px] font-bold text-gray-500 block">Total Expenses</span><span className="text-lg font-black text-[#8B2610]">{formatMoney(totalExpenses, currencySymbol)}</span></div>
-                <div className="bg-white p-3 rounded-xl border"><span className="text-[11px] font-bold text-gray-500 block">Net Profit</span><span className={`text-lg font-black ${netProfit >= 0 ? 'text-[#4E8B31]' : 'text-red-600'}`}>{formatMoney(netProfit, currencySymbol)}</span></div>
-              </div>
-            </div>
-
-            <button type="submit" disabled={saving} className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-extrabold text-sm shadow transition flex items-center justify-center gap-2">
-              <PlusCircle className="w-5 h-5 text-[#F5B942]" /> {saving ? 'Saving...' : editingTrip ? 'Update Trip' : 'Save Trip'}
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div className="md:col-span-2"><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Title *</label><input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Airport Drop-off" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Date *</label><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Type *</label><select value={tripType} onChange={(e) => setTripType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]">{TRIP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Client / Org Name *</label><input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder="Organization name" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Vehicle</label><input type="text" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Vehicle number" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Pickup Location</label><input type="text" value={startLocation} onChange={(e) => setStartLocation(e.target.value)} placeholder="From" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Destination</label><input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="To" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div></div>
+            <div className="p-4 rounded-2xl bg-[#FFF4EE] border border-[#E8C5B5]"><h3 className="text-xs font-extrabold uppercase text-[#4E1609] mb-3">Fare & Expenses ({currencySymbol})</h3><div className="grid grid-cols-2 md:grid-cols-4 gap-3"><div><label className="block text-xs font-bold text-emerald-800 mb-1">Income *</label><input type="number" step="any" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold text-emerald-900" /></div><div><label className="block text-xs font-bold text-[#4E1609] mb-1">Fuel</label><input type="number" step="any" min="0" value={fuel} onChange={(e) => setFuel(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div><div><label className="block text-xs font-bold text-[#4E1609] mb-1">Meals</label><input type="number" step="any" min="0" value={meals} onChange={(e) => setMeals(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div><div><label className="block text-xs font-bold text-[#4E1609] mb-1">Tolls / Other</label><input type="number" step="any" min="0" value={other} onChange={(e) => setOther(e.target.value)} placeholder="0" className="w-full px-3 py-2.5 rounded-xl border border-[#D8B4A4] bg-white" /></div></div><div className="mt-4 pt-3 border-t border-[#E2B8A6] grid grid-cols-2 gap-4"><div className="bg-white p-3 rounded-xl border"><span className="text-[11px] font-bold text-gray-500 block">Total Expenses</span><span className="text-lg font-black text-[#8B2610]">{formatMoney(totalExpenses, currencySymbol)}</span></div><div className="bg-white p-3 rounded-xl border"><span className="text-[11px] font-bold text-gray-500 block">Net Profit</span><span className={`text-lg font-black ${netProfit >= 0 ? 'text-[#4E8B31]' : 'text-red-600'}`}>{formatMoney(netProfit, currencySymbol)}</span></div></div></div>
+            <button type="submit" disabled={saving} className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-extrabold text-sm shadow transition flex items-center justify-center gap-2"><PlusCircle className="w-5 h-5 text-[#F5B942]" /> {saving ? 'Saving...' : editingTrip ? 'Update Trip' : 'Save Trip'}</button>
           </form>
         </div>
       );
     }
 
-    function DashboardView({ trips, expenses, currencySymbol, userEmail }) {
-      const [selectedYear, setSelectedYear] = useState('All');
-      const [selectedMonth, setSelectedMonth] = useState('All');
-      const [selectedType, setSelectedType] = useState('All');
-      const [selectedVehicle, setSelectedVehicle] = useState('All');
-      const [reportTab, setReportTab] = useState('all');
-
-      const availableYears = useMemo(() => {
-        const yrs = new Set([String(new Date().getFullYear())]);
-        trips.forEach((t) => { if (t.date && t.date.length >= 4) yrs.add(t.date.slice(0, 4)); });
-        return ['All', ...Array.from(yrs).sort().reverse()];
-      }, [trips]);
-
-      const availableVehicles = useMemo(() => {
-        const vSet = new Set();
-        trips.forEach((t) => { if (t.vehicle) vSet.add(t.vehicle); });
-        return ['All', ...Array.from(vSet)];
-      }, [trips]);
+    function DriverDashboardView({ trips, expenses, currencySymbol, userEmail, businessName }) {
+      const [selectedYear, setSelectedYear] = useState('All'); const [selectedMonth, setSelectedMonth] = useState('All'); const [selectedType, setSelectedType] = useState('All'); const [reportTab, setReportTab] = useState('all');
+      const [startDate, setStartDate] = useState(''); const [endDate, setEndDate] = useState('');
+      
+      const availableYears = useMemo(() => { const yrs = new Set([String(new Date().getFullYear())]); trips.forEach((t) => { if (t.date && t.date.length >= 4) yrs.add(t.date.slice(0, 4)); }); return ['All', ...Array.from(yrs).sort().reverse()]; }, [trips]);
 
       const { filteredTrips, filteredExpenses } = useMemo(() => {
-        const now = new Date();
-        const todayStr = now.toISOString().slice(0, 10);
-        const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 7);
-        const currentMonthPrefix = todayStr.slice(0, 7);
-
+        const now = new Date(); const todayStr = now.toISOString().slice(0, 10); const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 7); const currentMonthPrefix = todayStr.slice(0, 7);
         const matchDate = (dateStr) => {
           if (!dateStr) return true;
-          if (selectedYear !== 'All' && !dateStr.startsWith(selectedYear)) return false;
+          if (startDate && endDate) return dateStr >= startDate && dateStr <= endDate;
+          if (startDate) return dateStr >= startDate;
+          if (selectedYear !== 'All' && !dateStr.startsWith(selectedYear)) return false; 
           if (selectedMonth !== 'All' && dateStr.slice(5, 7) !== String(MONTHS.indexOf(selectedMonth) + 1).padStart(2, '0')) return false;
-          if (reportTab === 'daily') return dateStr === todayStr;
-          if (reportTab === 'weekly') return new Date(dateStr) >= sevenDaysAgo;
-          if (reportTab === 'monthly') return dateStr.startsWith(currentMonthPrefix);
+          if (reportTab === 'daily') return dateStr === todayStr; 
+          if (reportTab === 'weekly') return new Date(dateStr) >= sevenDaysAgo; 
+          if (reportTab === 'monthly') return dateStr.startsWith(currentMonthPrefix); 
           return true;
         };
-
-        return {
-          filteredTrips: trips.filter((t) => matchDate(t.date) && (selectedType === 'All' || t.tripType === selectedType) && (selectedVehicle === 'All' || t.vehicle === selectedVehicle)),
-          filteredExpenses: expenses.filter((e) => matchDate(e.date) && (selectedVehicle === 'All' || e.vehicle === selectedVehicle))
-        };
-      }, [trips, expenses, selectedYear, selectedMonth, selectedType, selectedVehicle, reportTab]);
+        return { filteredTrips: trips.filter((t) => matchDate(t.date) && (selectedType === 'All' || t.tripType === selectedType)), filteredExpenses: expenses.filter((e) => matchDate(e.date)) };
+      }, [trips, expenses, selectedYear, selectedMonth, selectedType, reportTab, startDate, endDate]);
 
       const stats = useMemo(() => {
         const totalIncome = filteredTrips.reduce((s, t) => s + (Number(t.price) || 0), 0);
         const totalExpenses = filteredTrips.reduce((s, t) => s + (Number(t.totalExpenses) || 0), 0) + filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
         const netProfit = totalIncome - totalExpenses;
-        const profitMarginPct = totalIncome > 0 ? Math.max(0, Math.min(100, (netProfit / totalIncome) * 100)) : 0;
-        return { totalTrips: filteredTrips.length, totalIncome, totalExpenses, netProfit, profitMarginPct };
+        return { totalTrips: filteredTrips.length, totalIncome, totalExpenses, netProfit };
       }, [filteredTrips, filteredExpenses]);
 
       return (
         <div className="flex flex-col xl:flex-row gap-4">
           <div className="flex-1 space-y-4">
             <div className="bg-[#4E1609] rounded-2xl px-5 py-3.5 text-white flex flex-wrap justify-between items-center gap-3 shadow border-b-4 border-[#E5A93C]">
-              <div>
-                <h2 className="text-lg font-black">Executive Analytics</h2>
-                <p className="text-[11px] text-[#FAD8C8]">Real-time cloud business overview</p>
-              </div>
-              <div className="flex gap-2 no-print">
-                <button type="button" onClick={() => exportToExcelWorkbook({ trips: filteredTrips, expenses: filteredExpenses, currencySymbol, periodLabel: reportTab.toUpperCase(), userEmail })} className="px-3 py-1.5 rounded-xl bg-[#5E8C31] text-white text-xs font-bold flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-4 h-4" /> Export Excel
-                </button>
-                <button type="button" onClick={() => window.print()} className="px-3 py-1.5 rounded-xl bg-white/20 text-white text-xs font-bold flex items-center gap-1.5">
-                  <Printer className="w-4 h-4" /> Print
-                </button>
-              </div>
+              <div><h2 className="text-lg font-black">Driver Executive Analytics</h2><p className="text-[11px] text-[#FAD8C8]">Real-time cloud business overview</p></div>
+              <div className="flex gap-2 no-print"><button type="button" onClick={() => generateDriverPDF({ trips: filteredTrips, expenses: filteredExpenses, currencySymbol, periodLabel: reportTab.toUpperCase(), userEmail, businessName })} className="px-3 py-1.5 rounded-xl bg-[#8B2610] text-white text-xs font-bold flex items-center gap-1.5"><FileText className="w-4 h-4" /> Download PDF Report</button></div>
             </div>
-
-            {/* Time Period Filter Tabs (Daily, Weekly, Monthly, All) */}
-            <div className="flex gap-2 bg-white p-2 rounded-2xl border shadow-sm overflow-x-auto">
-              {[
-                { id: 'all', label: 'All-Time' },
-                { id: 'daily', label: 'Today (Daily)' },
-                { id: 'weekly', label: 'Last 7 Days (Weekly)' },
-                { id: 'monthly', label: 'This Month (Monthly)' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setReportTab(tab.id)}
-                  className={`px-4 py-2 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${reportTab === tab.id ? 'bg-[#4E1609] text-white shadow' : 'bg-[#FFF3ED] text-[#4E1609] hover:bg-[#E8C5B5]/40'}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            
+            <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border shadow-sm items-center justify-between">
+              <div className="flex gap-1 overflow-x-auto">
+                {[{ id: 'all', label: 'All-Time' }, { id: 'daily', label: 'Today' }, { id: 'weekly', label: 'Last 7 Days' }, { id: 'monthly', label: 'This Month' }].map((tab) => (
+                  <button key={tab.id} type="button" onClick={() => { setReportTab(tab.id); setStartDate(''); setEndDate(''); }} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${reportTab === tab.id && !startDate ? 'bg-[#4E1609] text-white shadow' : 'bg-[#FFF3ED] text-[#4E1609] hover:bg-[#E8C5B5]/40'}`}>{tab.label}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-[#FFF9F6] border rounded-xl text-xs">
+                <Calendar className="w-3.5 h-3.5 text-[#4E1609]" />
+                <span className="font-bold text-[10px] text-[#4E1609]">Date Search:</span>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-1.5 py-0.5 rounded border bg-white text-[11px]" />
+                <span>to</span>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-1.5 py-0.5 rounded border bg-white text-[11px]" />
+                {(startDate || endDate) && <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }} className="text-[10px] text-red-600 font-bold underline px-1">Reset</button>}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
-                <div className="text-2xl font-black">{stats.totalTrips}</div>
-                <div className="text-xs font-bold text-[#4E1609] mt-1">Total Trips</div>
-              </div>
-              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
-                <div className="text-2xl font-black text-gray-900">{formatCompact(stats.totalIncome, currencySymbol)}</div>
-                <div className="text-xs font-bold text-[#4E1609] mt-1">Gross Income</div>
-              </div>
-              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
-                <div className="text-2xl font-black text-[#8B2610]">{formatCompact(stats.totalExpenses, currencySymbol)}</div>
-                <div className="text-xs font-bold text-[#4E1609] mt-1">Total Expenses</div>
-              </div>
-              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm">
-                <div className="text-2xl font-black text-[#4E8B31]">{formatCompact(stats.netProfit, currencySymbol)}</div>
-                <div className="text-xs font-bold text-[#4E1609] mt-1">Net Profit</div>
-              </div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black">{stats.totalTrips}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Total Trips</div></div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black text-gray-900">{formatCompact(stats.totalIncome, currencySymbol)}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Gross Income</div></div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black text-[#8B2610]">{formatCompact(stats.totalExpenses, currencySymbol)}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Total Expenses</div></div>
+              <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black text-[#4E8B31]">{formatCompact(stats.netProfit, currencySymbol)}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Net Profit</div></div>
             </div>
           </div>
-
           <aside className="w-full xl:w-56 bg-[#4E1609] text-white rounded-2xl p-4 shadow border-2 border-[#7A2917] space-y-4 no-print">
-            <div className="flex justify-between items-center border-b border-[#7A2917] pb-2">
-              <span className="text-xs font-black text-[#F5B942] flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Slicers</span>
-              <button type="button" onClick={() => { setSelectedYear('All'); setSelectedMonth('All'); setSelectedType('All'); setSelectedVehicle('All'); setReportTab('all'); }} className="text-[10px] text-[#FAD8C8] underline">Reset</button>
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Year</div>
-              <div className="grid grid-cols-2 gap-1">{availableYears.map((yr) => <button key={yr} type="button" onClick={() => setSelectedYear(yr)} className={`py-1 rounded text-xs font-bold ${selectedYear === yr ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{yr}</button>)}</div>
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Trip Type</div>
-              <div className="space-y-1">{['All', ...TRIP_TYPES].map((t) => <button key={t} type="button" onClick={() => setSelectedType(t)} className={`w-full text-left py-1 px-2 rounded text-xs font-bold truncate ${selectedType === t ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{t}</button>)}</div>
-            </div>
+            <div className="flex justify-between items-center border-b border-[#7A2917] pb-2"><span className="text-xs font-black text-[#F5B942] flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Slicers</span><button type="button" onClick={() => { setSelectedYear('All'); setSelectedType('All'); setReportTab('all'); setStartDate(''); setEndDate(''); }} className="text-[10px] text-[#FAD8C8] underline">Reset</button></div>
+            <div><div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Year</div><div className="grid grid-cols-2 gap-1">{availableYears.map((yr) => <button key={yr} type="button" onClick={() => setSelectedYear(yr)} className={`py-1 rounded text-xs font-bold ${selectedYear === yr ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{yr}</button>)}</div></div>
+            <div><div className="text-[11px] font-bold text-[#FAD8C8] mb-1">Trip Type</div><div className="space-y-1">{['All', ...TRIP_TYPES].map((t) => <button key={t} type="button" onClick={() => setSelectedType(t)} className={`w-full text-left py-1 px-2 rounded text-xs font-bold truncate ${selectedType === t ? 'bg-[#FAD8C8] text-[#4E1609]' : 'bg-[#6B1D0E] text-white'}`}>{t}</button>)}</div></div>
           </aside>
         </div>
       );
     }
 
-    function TripHistoryView({ trips, expenses, currencySymbol, user, userEmail, onEditTrip }) {
+    function DriverHistoryView({ trips, expenses, currencySymbol, user, userEmail, businessName, onEditTrip }) {
       const [searchQuery, setSearchQuery] = useState('');
-      const filtered = trips.filter((t) => !searchQuery || (t.title + t.client + t.vehicle).toLowerCase().includes(searchQuery.toLowerCase()));
+      const [startDate, setStartDate] = useState('');
+      const [endDate, setEndDate] = useState('');
+
+      const filtered = trips.filter((t) => {
+        const matchesSearch = !searchQuery || (t.title + t.client + t.vehicle).toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDate = (!startDate || t.date >= startDate) && (!endDate || t.date <= endDate);
+        return matchesSearch && matchesDate;
+      });
 
       return (
         <div className="space-y-4">
           <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl flex justify-between items-center border-b-4 border-[#E5A93C]">
-            <div><h2 className="text-lg font-black">Trip History</h2><p className="text-xs text-[#FAD8C8]">{filtered.length} records</p></div>
-            <button type="button" onClick={() => exportToExcelWorkbook({ trips: filtered, expenses, currencySymbol, periodLabel: 'History', userEmail })} className="px-4 py-2 rounded-xl bg-[#5E8C31] text-white text-xs font-bold flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" /> Export Excel</button>
+            <div><h2 className="text-lg font-black">Driver Trip History</h2><p className="text-xs text-[#FAD8C8]">{filtered.length} records found</p></div>
+            <button type="button" onClick={() => generateDriverPDF({ trips: filtered, expenses, currencySymbol, periodLabel: 'HISTORY', userEmail, businessName })} className="px-4 py-2 rounded-xl bg-[#8B2610] text-white text-xs font-bold flex items-center gap-2"><FileText className="w-4 h-4" /> Export PDF</button>
           </div>
-          <div className="bg-white p-4 rounded-2xl border"><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search records..." className="w-full px-3 py-2 rounded-xl border bg-[#FFF9F6]" /></div>
+          
+          <div className="bg-white p-4 rounded-2xl border flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex-1 min-w-[200px]"><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search records by title, client, vehicle..." className="w-full px-3 py-2 rounded-xl border bg-[#FFF9F6] text-xs" /></div>
+            <div className="flex items-center gap-2 text-xs">
+              <Calendar className="w-4 h-4 text-[#4E1609]" />
+              <span className="font-bold text-[#4E1609]">From:</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-2 py-1.5 rounded-xl border bg-[#FFF9F6]" />
+              <span className="font-bold text-[#4E1609]">To:</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-2 py-1.5 rounded-xl border bg-[#FFF9F6]" />
+              {(startDate || endDate) && <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }} className="text-xs text-red-600 font-bold underline">Clear</button>}
+            </div>
+          </div>
+
           <div className="space-y-3">
             {filtered.map((trip) => (
               <div key={trip.id} className="bg-white rounded-2xl p-4 border flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div>
                   <div className="flex gap-2"><span className="text-[11px] font-bold bg-[#4E1609] text-[#F5B942] px-2 py-0.5 rounded">{trip.tripType}</span><span className="text-xs text-gray-500">{trip.date}</span></div>
-                  <h3 className="text-base font-black mt-1">{trip.title}</h3>
-                  <p className="text-xs text-gray-600">Client: {trip.client || 'N/A'} • Vehicle: {trip.vehicle || 'N/A'}</p>
+                  <h3 className="text-base font-black mt-1">{trip.title}</h3><p className="text-xs text-gray-600">Client: {trip.client || 'N/A'} • Vehicle: {trip.vehicle || 'N/A'}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right"><div className="text-[10px] text-gray-400 font-bold">PROFIT</div><div className="text-sm font-black text-[#4E8B31]">{formatMoney(trip.netProfit, currencySymbol)}</div></div>
@@ -703,76 +542,272 @@
       );
     }
 
-    function ExpensesView({ expenses, currencySymbol, user, defaultVehicle }) {
-      const [title, setTitle] = useState(''); const [category, setCategory] = useState('Fuel'); const [amount, setAmount] = useState(''); const [date, setDate] = useState(new Date().toISOString().slice(0, 10)); const [vehicle, setVehicle] = useState(defaultVehicle || '');
-      const handleAdd = async (e) => {
-        e.preventDefault();
-        await addDoc(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'expenses'), { title: title || category, category, amount: parseFloat(amount) || 0, date, vehicle: vehicle || 'Primary' });
-        setTitle(''); setAmount('');
+    // ========================================================================
+    // PROVIDER PORTAL COMPONENTS
+    // ========================================================================
+    function RecordProviderTxView({ user, currencySymbol, editingTx, onCancelEdit, onSaved }) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const [title, setTitle] = useState(''); const [date, setDate] = useState(todayStr); const [client, setClient] = useState(''); const [providerName, setProviderName] = useState(''); const [tripType, setTripType] = useState('City Trip'); const [vehicle, setVehicle] = useState(''); const [startLocation, setStartLocation] = useState(''); const [destination, setDestination] = useState(''); const [saleRate, setSaleRate] = useState(''); const [purchaseRate, setPurchaseRate] = useState(''); const [notes, setNotes] = useState(''); const [saving, setSaving] = useState(false);
+
+      useEffect(() => {
+        if (editingTx) {
+          setTitle(editingTx.title || ''); setDate(editingTx.date || todayStr); setClient(editingTx.client || ''); setProviderName(editingTx.providerName || ''); setTripType(editingTx.tripType || 'City Trip'); setVehicle(editingTx.vehicle || ''); setStartLocation(editingTx.startLocation || ''); setDestination(editingTx.destination || ''); setSaleRate(String(editingTx.saleRate || '')); setPurchaseRate(String(editingTx.purchaseRate || '')); setNotes(editingTx.notes || '');
+        }
+      }, [editingTx, todayStr]);
+
+      const handleSave = async (e) => {
+        e.preventDefault(); setSaving(true);
+        try {
+          const payload = { title: title.trim() || `${tripType} - ${destination || 'Transaction'}`, date, client: client.trim() || 'General Organization', providerName: providerName.trim() || 'Direct Provider', tripType, vehicle: vehicle.trim() || 'N/A', startLocation: startLocation.trim(), destination: destination.trim(), saleRate: parseFloat(saleRate) || 0, purchaseRate: parseFloat(purchaseRate) || 0, notes: notes.trim(), updatedAt: serverTimestamp() };
+          const txRef = collection(db, 'artifacts', APP_ID, 'users', user.uid, 'providerTransactions');
+          if (editingTx?.id) await updateDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'providerTransactions', editingTx.id), payload);
+          else await addDoc(txRef, { ...payload, createdAt: serverTimestamp() });
+          if (!editingTx) { setTitle(''); setClient(''); setProviderName(''); setVehicle(''); setStartLocation(''); setDestination(''); setSaleRate(''); setPurchaseRate(''); setNotes(''); }
+          onSaved(editingTx ? 'Transaction updated!' : 'Transaction recorded!');
+        } catch (err) { alert('Error: ' + err.message); } finally { setSaving(false); }
       };
+
       return (
-        <div className="max-w-4xl mx-auto space-y-5">
-          <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl border-b-4 border-[#E5A93C]"><h2 className="text-lg font-black">Standalone Expenses</h2></div>
-          <form onSubmit={handleAdd} className="bg-white p-5 rounded-2xl border space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3.5 py-2.5 rounded-xl border bg-[#FFF9F6]">{EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-              <input type="number" step="any" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="px-3.5 py-2.5 rounded-xl border bg-[#FFF9F6]" />
-              <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="px-3.5 py-2.5 rounded-xl border bg-[#FFF9F6]" />
-            </div>
-            <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Description (e.g. Oil Change)" className="w-full px-3.5 py-2.5 rounded-xl border bg-[#FFF9F6]" />
-            <button type="submit" className="px-6 py-3 rounded-xl bg-[#4E1609] text-white font-bold text-sm">Add Expense</button>
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-[#4E1609] text-white px-6 py-4 rounded-2xl mb-5 flex justify-between items-center shadow border-b-4 border-[#E5A93C]">
+            <div><h2 className="text-lg font-extrabold">{editingTx ? 'Edit Provider Transaction' : 'Record Provider Transaction'}</h2><p className="text-xs text-[#FAD8C8]">Manage B2B Sale and Purchase Rates</p></div>
+            {editingTx && <button type="button" onClick={onCancelEdit} className="px-3 py-1.5 rounded bg-white/20 text-xs font-bold">Cancel</button>}
+          </div>
+          <form onSubmit={handleSave} className="bg-white rounded-2xl p-6 shadow-md border border-[#E2B8A6] space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div className="md:col-span-2"><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Transaction Title *</label><input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Monthly Staff Transport" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Date *</label><input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Organization / Client *</label><input type="text" required value={client} onChange={(e) => setClient(e.target.value)} placeholder="Organization Name" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Transport Provider</label><input type="text" value={providerName} onChange={(e) => setProviderName(e.target.value)} placeholder="Provider Name" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Trip Type *</label><select value={tripType} onChange={(e) => setTripType(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]">{TRIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Vehicle</label><input type="text" value={vehicle} onChange={(e) => setVehicle(e.target.value)} placeholder="Vehicle info" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-emerald-800 uppercase mb-1">Sale Rate * ({currencySymbol})</label><input type="number" step="any" min="0" required value={saleRate} onChange={(e) => setSaleRate(e.target.value)} placeholder="0" className="w-full px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white font-bold" /></div><div><label className="block text-xs font-bold text-[#8B2610] uppercase mb-1">Purchase Rate * ({currencySymbol})</label><input type="number" step="any" min="0" required value={purchaseRate} onChange={(e) => setPurchaseRate(e.target.value)} placeholder="0" className="w-full px-3.5 py-2.5 rounded-xl border border-red-300 bg-white font-bold" /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Starting Location</label><input type="text" value={startLocation} onChange={(e) => setStartLocation(e.target.value)} placeholder="From" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div><div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Destination</label><input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="To" className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]" /></div></div>
+            <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Additional Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows="2" placeholder="Notes..." className="w-full px-3.5 py-2.5 rounded-xl border border-[#D8B4A4] bg-[#FFF9F6]"></textarea></div>
+            <button type="submit" disabled={saving} className="w-full py-3.5 rounded-xl bg-[#4E1609] hover:bg-[#6B1D0E] text-white font-extrabold text-sm shadow transition">{saving ? 'Saving...' : editingTx ? 'Update Transaction' : 'Save Transaction'}</button>
           </form>
-          <div className="space-y-2">{expenses.map(e => <div key={e.id} className="bg-white p-4 rounded-2xl border flex justify-between items-center"><div><span className="text-[10px] bg-orange-100 px-2 py-0.5 rounded font-bold">{e.category}</span><h4 className="text-sm font-bold mt-1">{e.title}</h4></div><span className="text-sm font-black text-[#8B2610]">{formatMoney(e.amount, currencySymbol)}</span></div>)}</div>
         </div>
       );
     }
 
-    function SettingsView({ user, preferences, onSavePreferences, trips, expenses }) {
+    function ProviderDashboardView({ providerTransactions, currencySymbol, userEmail, businessName }) {
+      const [reportTab, setReportTab] = useState('all');
+      const [startDate, setStartDate] = useState('');
+      const [endDate, setEndDate] = useState('');
+      
+      const filtered = useMemo(() => {
+        const now = new Date(); const todayStr = now.toISOString().slice(0, 10); const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 7); const currentMonthPrefix = todayStr.slice(0, 7);
+        return providerTransactions.filter((t) => {
+          if (startDate && endDate) return t.date >= startDate && t.date <= endDate;
+          if (startDate) return t.date >= startDate;
+          if (reportTab === 'daily') return t.date === todayStr; 
+          if (reportTab === 'weekly') return new Date(t.date) >= sevenDaysAgo; 
+          if (reportTab === 'monthly') return t.date.startsWith(currentMonthPrefix); 
+          return true;
+        });
+      }, [providerTransactions, reportTab, startDate, endDate]);
+
+      const stats = useMemo(() => {
+        return {
+          totalSales: filtered.reduce((s, t) => s + (Number(t.saleRate) || 0), 0),
+          totalPurchases: filtered.reduce((s, t) => s + (Number(t.purchaseRate) || 0), 0),
+          totalOrgs: new Set(filtered.map(t => t.client)).size,
+          totalTransactions: filtered.length
+        };
+      }, [filtered]);
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-[#4E1609] text-white px-5 py-3.5 rounded-2xl flex flex-wrap justify-between items-center gap-3 shadow border-b-4 border-[#E5A93C]">
+            <div><h2 className="text-lg font-black">Provider Executive Analytics</h2><p className="text-[11px] text-[#FAD8C8]">B2B Organization Sale & Purchase Rates</p></div>
+            <button type="button" onClick={() => generateProviderPDF({ transactions: filtered, currencySymbol, periodLabel: reportTab.toUpperCase(), userEmail, businessName })} className="px-3 py-1.5 rounded-xl bg-[#8B2610] text-white text-xs font-bold flex items-center gap-1.5"><FileText className="w-4 h-4" /> Download PDF Report</button>
+          </div>
+          
+          <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border shadow-sm items-center justify-between">
+            <div className="flex gap-1 overflow-x-auto">
+              {[{ id: 'all', label: 'All-Time' }, { id: 'daily', label: 'Today' }, { id: 'weekly', label: 'Last 7 Days' }, { id: 'monthly', label: 'This Month' }].map((tab) => (
+                <button key={tab.id} type="button" onClick={() => { setReportTab(tab.id); setStartDate(''); setEndDate(''); }} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${reportTab === tab.id && !startDate ? 'bg-[#4E1609] text-white shadow' : 'bg-[#FFF3ED] text-[#4E1609] hover:bg-[#E8C5B5]/40'}`}>{tab.label}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-[#FFF9F6] border rounded-xl text-xs">
+              <Calendar className="w-3.5 h-3.5 text-[#4E1609]" />
+              <span className="font-bold text-[10px] text-[#4E1609]">Date Search:</span>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-1.5 py-0.5 rounded border bg-white text-[11px]" />
+              <span>to</span>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-1.5 py-0.5 rounded border bg-white text-[11px]" />
+              {(startDate || endDate) && <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }} className="text-[10px] text-red-600 font-bold underline px-1">Reset</button>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black">{stats.totalTransactions}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Transactions</div></div>
+            <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black text-emerald-800">{formatCompact(stats.totalSales, currencySymbol)}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Total Sales</div></div>
+            <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black text-[#8B2610]">{formatCompact(stats.totalPurchases, currencySymbol)}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Total Purchases</div></div>
+            <div className="bg-white rounded-2xl p-4 text-center border shadow-sm"><div className="text-2xl font-black">{stats.totalOrgs}</div><div className="text-xs font-bold text-[#4E1609] mt-1">Organizations</div></div>
+          </div>
+        </div>
+      );
+    }
+
+    function ProviderHistoryView({ providerTransactions, currencySymbol, user, userEmail, businessName, onEditTx }) {
+      const [searchQuery, setSearchQuery] = useState('');
+      const [startDate, setStartDate] = useState('');
+      const [endDate, setEndDate] = useState('');
+
+      const filtered = providerTransactions.filter((tx) => {
+        const matchesSearch = !searchQuery || (tx.title + tx.client + tx.providerName + tx.vehicle).toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDate = (!startDate || tx.date >= startDate) && (!endDate || tx.date <= endDate);
+        return matchesSearch && matchesDate;
+      });
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl flex justify-between items-center border-b-4 border-[#E5A93C]">
+            <div><h2 className="text-lg font-black">Provider Transactions History</h2><p className="text-xs text-[#FAD8C8]">{filtered.length} records found</p></div>
+            <button type="button" onClick={() => generateProviderPDF({ transactions: filtered, currencySymbol, periodLabel: 'HISTORY', userEmail, businessName })} className="px-4 py-2 rounded-xl bg-[#8B2610] text-white text-xs font-bold flex items-center gap-2"><FileText className="w-4 h-4" /> Export PDF</button>
+          </div>
+          
+          <div className="bg-white p-4 rounded-2xl border flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex-1 min-w-[200px]"><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search provider transactions..." className="w-full px-3 py-2 rounded-xl border bg-[#FFF9F6] text-xs" /></div>
+            <div className="flex items-center gap-2 text-xs">
+              <Calendar className="w-4 h-4 text-[#4E1609]" />
+              <span className="font-bold text-[#4E1609]">From:</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="px-2 py-1.5 rounded-xl border bg-[#FFF9F6]" />
+              <span className="font-bold text-[#4E1609]">To:</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="px-2 py-1.5 rounded-xl border bg-[#FFF9F6]" />
+              {(startDate || endDate) && <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }} className="text-xs text-red-600 font-bold underline">Clear</button>}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {filtered.map((tx) => (
+              <div key={tx.id} className="bg-white rounded-2xl p-4 border flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                  <div className="flex gap-2"><span className="text-[11px] font-bold bg-[#4E1609] text-[#F5B942] px-2 py-0.5 rounded">{tx.tripType}</span><span className="text-xs text-gray-500">{tx.date}</span></div>
+                  <h3 className="text-base font-black mt-1">{tx.title}</h3><p className="text-xs text-gray-600">Org: <b>{tx.client}</b> • Provider: {tx.providerName || 'N/A'}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right"><div className="text-xs font-bold text-emerald-800">Sale: {formatMoney(tx.saleRate, currencySymbol)}</div><div className="text-xs font-bold text-[#8B2610]">Purchase: {formatMoney(tx.purchaseRate, currencySymbol)}</div></div>
+                  <button type="button" onClick={() => onEditTx(tx)} className="p-2 rounded bg-amber-50 text-[#4E1609]"><Edit3 className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => deleteDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'providerTransactions', tx.id))} className="p-2 rounded bg-red-50 text-red-600"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function OrganizationHistoryView({ trips, providerTransactions, currencySymbol }) {
+      const [searchTerm, setSearchTerm] = useState(''); const [selectedOrg, setSelectedOrg] = useState(null);
+      const organizations = useMemo(() => {
+        const orgMap = {};
+        trips.forEach(t => { const orgName = (t.client || 'General Client').trim(); if (!orgMap[orgName]) orgMap[orgName] = { name: orgName, driverTrips: [], providerTxs: [] }; orgMap[orgName].driverTrips.push(t); });
+        providerTransactions.forEach(p => { const orgName = (p.client || 'General Organization').trim(); if (!orgMap[orgName]) orgMap[orgName] = { name: orgName, driverTrips: [], providerTxs: [] }; orgMap[orgName].providerTxs.push(p); });
+        return Object.values(orgMap).sort((a,b) => a.name.localeCompare(b.name));
+      }, [trips, providerTransactions]);
+      const filteredOrgs = useMemo(() => { if (!searchTerm) return organizations; return organizations.filter(o => o.name.toLowerCase().includes(searchTerm.toLowerCase())); }, [organizations, searchTerm]);
+
+      return (
+        <div className="space-y-5 max-w-6xl mx-auto">
+          <div className="bg-[#4E1609] text-white px-6 py-4 rounded-2xl flex justify-between items-center shadow border-b-4 border-[#E5A93C]"><div><h2 className="text-lg font-black flex items-center gap-2"><Building2 className="w-5 h-5 text-[#F5B942]" /> Client & Organization History</h2><p className="text-xs text-[#FAD8C8]">Unified multi-date service history</p></div></div>
+          {!selectedOrg ? (
+            <div className="space-y-4">
+              <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-3"><Search className="w-5 h-5 text-gray-400" /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search organizations..." className="w-full px-3 py-2 rounded-xl border bg-[#FFF9F6] text-sm focus:outline-none" /></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredOrgs.map((org) => (
+                  <div key={org.name} onClick={() => setSelectedOrg(org)} className="bg-white rounded-2xl p-5 border shadow-sm hover:border-[#4E1609] transition cursor-pointer flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2"><span className="text-[10px] font-bold bg-[#4E1609] text-[#F5B942] px-2 py-0.5 rounded">ORG PROFILE</span><span className="text-xs font-black text-gray-700">{org.driverTrips.length + org.providerTxs.length} Records</span></div>
+                      <h3 className="text-base font-black text-[#4E1609]">{org.name}</h3><p className="text-xs text-gray-500 mt-1">Driver: {org.driverTrips.length} | Provider: {org.providerTxs.length}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5 bg-white p-6 rounded-2xl border shadow-sm">
+              <div className="flex justify-between items-center border-b pb-4"><div><span className="text-xs font-bold text-[#8B2610] uppercase">Organization Profile</span><h3 className="text-2xl font-black text-[#4E1609] mt-0.5">{selectedOrg.name}</h3></div><button type="button" onClick={() => setSelectedOrg(null)} className="px-4 py-2 rounded-xl bg-[#4E1609] text-white text-xs font-bold">Back</button></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3"><h4 className="text-sm font-black text-[#4E1609] uppercase flex items-center gap-1.5"><Truck className="w-4 h-4 text-[#E5A93C]" /> Driver Trips ({selectedOrg.driverTrips.length})</h4>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">{selectedOrg.driverTrips.map(t => (<div key={t.id} className="p-3.5 rounded-xl bg-[#FFF9F6] border border-[#E8C5B5] space-y-1"><div className="flex justify-between text-xs font-bold"><span className="text-[#4E1609]">{t.title}</span><span className="text-gray-500">{t.date}</span></div><div className="text-xs text-gray-600">Vehicle: {t.vehicle}</div><div className="flex justify-between text-xs font-black pt-1 border-t"><span className="text-emerald-800">Income: {formatMoney(t.price, currencySymbol)}</span><span className="text-[#4E8B31]">Profit: {formatMoney(t.netProfit, currencySymbol)}</span></div></div>))}</div>
+                </div>
+                <div className="space-y-3"><h4 className="text-sm font-black text-[#4E1609] uppercase flex items-center gap-1.5"><Briefcase className="w-4 h-4 text-[#E5A93C]" /> Provider Txs ({selectedOrg.providerTxs.length})</h4>
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">{selectedOrg.providerTxs.map(p => (<div key={p.id} className="p-3.5 rounded-xl bg-[#FFF9F6] border border-[#E8C5B5] space-y-1"><div className="flex justify-between text-xs font-bold"><span className="text-[#4E1609]">{p.title}</span><span className="text-gray-500">{p.date}</span></div><div className="text-xs text-gray-600">Provider: {p.providerName || 'N/A'}</div><div className="flex justify-between text-xs font-black pt-1 border-t"><span className="text-emerald-800">Sale: {formatMoney(p.saleRate, currencySymbol)}</span><span className="text-[#8B2610]">Purchase: {formatMoney(p.purchaseRate, currencySymbol)}</span></div></div>))}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function SettingsView({ user, preferences, onSavePreferences }) {
       const [curr, setCurr] = useState(preferences.currencyCode || 'PKR'); const [veh, setVeh] = useState(preferences.defaultVehicle || ''); const [biz, setBiz] = useState(preferences.businessName || '');
       return (
         <div className="max-w-3xl mx-auto space-y-5">
-          <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl border-b-4 border-[#E5A93C]"><h2 className="text-lg font-black">Settings & Backups</h2></div>
+          <div className="bg-[#4E1609] text-white px-5 py-4 rounded-2xl border-b-4 border-[#E5A93C]"><h2 className="text-lg font-black">Settings</h2></div>
           <form onSubmit={(e) => { e.preventDefault(); onSavePreferences({ currencyCode: curr, currencySymbol: CURRENCIES.find(c => c.code === curr)?.symbol || 'Rs.', defaultVehicle: veh, businessName: biz }); alert('Saved!'); }} className="bg-white p-6 rounded-2xl border space-y-4">
             <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Currency</label><select value={curr} onChange={(e) => setCurr(e.target.value)} className="w-full px-4 py-3 rounded-xl border bg-[#FFF9F6]">{CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}</select></div>
             <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Default Vehicle</label><input type="text" value={veh} onChange={(e) => setVeh(e.target.value)} className="w-full px-4 py-3 rounded-xl border bg-[#FFF9F6]" /></div>
             <div><label className="block text-xs font-bold text-[#4E1609] uppercase mb-1">Company / Fleet Name</label><input type="text" value={biz} onChange={(e) => setBiz(e.target.value)} className="w-full px-4 py-3 rounded-xl border bg-[#FFF9F6]" /></div>
             <button type="submit" className="px-6 py-3 rounded-xl bg-[#4E1609] text-white font-bold">Save Preferences</button>
           </form>
-          <div className="bg-white p-6 rounded-2xl border space-y-3"><h3 className="text-sm font-black text-[#4E1609]">Full Excel Backup</h3><button type="button" onClick={() => exportToExcelWorkbook({ trips, expenses, currencySymbol: preferences.currencySymbol, periodLabel: 'All_Time', userEmail: user.email })} className="px-4 py-2.5 rounded-xl bg-[#5E8C31] text-white text-xs font-bold flex items-center gap-2"><FileSpreadsheet className="w-4 h-4" /> Download Complete Excel Report</button></div>
         </div>
       );
     }
 
     function App() {
-      const [user, setUser] = useState(null); const [authReady, setAuthReady] = useState(false); const [activeTab, setActiveTab] = useState('record'); const [trips, setTrips] = useState([]); const [expenses, setExpenses] = useState([]); const [editingTrip, setEditingTrip] = useState(null); const [toast, setToast] = useState(''); const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [user, setUser] = useState(null);
+      const [authReady, setAuthReady] = useState(false);
+      const [appMode, setAppMode] = useState('driver'); // 'driver' or 'provider'
+      const [activeDriverTab, setActiveDriverTab] = useState('record'); // Set Record as default first tab
+      const [activeProviderTab, setActiveProviderTab] = useState('record'); // Set Record as default first tab
+      
+      const [trips, setTrips] = useState([]);
+      const [providerTransactions, setProviderTransactions] = useState([]);
+      const [expenses, setExpenses] = useState([]);
+      const [editingTrip, setEditingTrip] = useState(null);
+      const [editingTx, setEditingTx] = useState(null);
+      const [toast, setToast] = useState('');
       const [preferences, setPreferences] = useState({ currencyCode: 'PKR', currencySymbol: 'Rs.', defaultVehicle: '', businessName: '' });
 
-      useEffect(() => {
-        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); setDeferredPrompt(e); });
-      }, []);
-
-      useEffect(() => {
-        return onAuthStateChanged(auth, (u) => { setUser(u); setAuthReady(true); });
-      }, []);
+      useEffect(() => { return onAuthStateChanged(auth, (u) => { setUser(u); setAuthReady(true); }); }, []);
 
       useEffect(() => {
         if (!user) return;
         const unsubTrips = onSnapshot(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'trips'), (s) => setTrips(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.date.localeCompare(a.date))));
+        const unsubProv = onSnapshot(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'providerTransactions'), (s) => setProviderTransactions(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.date.localeCompare(a.date))));
         const unsubExp = onSnapshot(collection(db, 'artifacts', APP_ID, 'users', user.uid, 'expenses'), (s) => setExpenses(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.date.localeCompare(a.date))));
         const unsubPref = onSnapshot(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'preferences'), (s) => { if (s.exists()) setPreferences(prev => ({ ...prev, ...s.data() })); });
-        return () => { unsubTrips(); unsubExp(); unsubPref(); };
+        return () => { unsubTrips(); unsubProv(); unsubExp(); unsubPref(); };
       }, [user]);
 
       if (!authReady) return <div className="min-h-screen flex items-center justify-center bg-[#FAD8C8]"><CarLogo3D size="lg" /></div>;
       if (!user) return <AuthScreen />;
 
-      const navItems = [
+      // Navigation order: "Record" is first, followed by Dashboard, History, Org History, and Settings
+      const driverNav = [
         { id: 'record', label: 'Record Trip', icon: PlusCircle },
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'dashboard', label: 'Driver Dashboard', icon: LayoutDashboard },
         { id: 'history', label: 'Trip History', icon: History },
-        { id: 'expenses', label: 'Expenses', icon: Receipt },
+        { id: 'org-history', label: 'Org History', icon: Building2 },
         { id: 'settings', label: 'Settings', icon: Settings }
       ];
+
+      const providerNav = [
+        { id: 'record', label: 'Record Transaction', icon: PlusCircle },
+        { id: 'dashboard', label: 'Provider Dashboard', icon: Briefcase },
+        { id: 'history', label: 'Tx History', icon: History },
+        { id: 'org-history', label: 'Org History', icon: Building2 },
+        { id: 'settings', label: 'Settings', icon: Settings }
+      ];
+
+      const currentNav = appMode === 'driver' ? driverNav : providerNav;
+      const activeTab = appMode === 'driver' ? activeDriverTab : activeProviderTab;
+      
+      const handleTabSwitch = (id) => {
+        if (appMode === 'driver') setActiveDriverTab(id); else setActiveProviderTab(id);
+        setEditingTrip(null); setEditingTx(null);
+      };
+
+      const toggleAppMode = () => {
+        setAppMode(prev => prev === 'driver' ? 'provider' : 'driver');
+        setEditingTrip(null); setEditingTx(null);
+      };
 
       return (
         <div className="min-h-screen pb-24 md:pb-8 bg-[#FAD8C8]">
@@ -782,33 +817,44 @@
                 <CarLogo3D size="sm" />
                 <div><span className="text-base font-black text-[#FFF6E5]">{preferences.businessName || 'DRIVE DATA'}</span><span className="text-[10px] text-[#F5B942] block">{user.email}</span></div>
               </div>
-              <div className="flex items-center gap-2">
-                {deferredPrompt && (
-                  <button type="button" onClick={() => { deferredPrompt.prompt(); deferredPrompt.userChoice.then(() => setDeferredPrompt(null)); }} className="px-3 py-1.5 rounded-xl bg-[#E5A93C] text-[#4E1609] text-xs font-black flex items-center gap-1.5 shadow">
-                    <Download className="w-4 h-4" /> Install App
-                  </button>
-                )}
-                <nav className="hidden md:flex items-center gap-1">
-                  {navItems.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => { if(item.id !== 'record') setEditingTrip(null); setActiveTab(item.id); }} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ${activeTab === item.id ? 'bg-[#FAD8C8] text-[#4E1609]' : 'text-[#FAD8C8] hover:bg-[#6B1D0E]'}`}><Icon className="w-4 h-4" />{item.label}</button>; })}
-                </nav>
-                <button type="button" onClick={() => signOut(auth)} className="px-3 py-2 rounded-xl bg-[#6B1D0E] text-[#FAD8C8] text-xs font-bold flex items-center gap-1"><LogOut className="w-4 h-4" /><span className="hidden sm:inline">Logout</span></button>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={toggleAppMode} className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-md transition ${appMode === 'driver' ? 'bg-[#5E8C31] text-white' : 'bg-[#E5A93C] text-[#4E1609]'}`}>
+                  <ArrowRightLeft className="w-4 h-4" /> 
+                  Switch to {appMode === 'driver' ? 'Provider' : 'Driver'} Mode
+                </button>
+                <button type="button" onClick={() => signOut(auth)} className="px-3 py-2 rounded-xl bg-[#6B1D0E] text-[#FAD8C8] text-xs font-bold hidden sm:flex items-center gap-1"><LogOut className="w-4 h-4" />Logout</button>
+              </div>
+            </div>
+            
+            <div className="bg-[#3A0E05] px-4 py-2 overflow-x-auto">
+              <div className="max-w-7xl mx-auto flex gap-2">
+                {currentNav.map(item => { 
+                  const Icon = item.icon; 
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button key={item.id} type="button" onClick={() => handleTabSwitch(item.id)} className={`px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition ${isActive ? 'bg-[#FAD8C8] text-[#4E1609]' : 'text-[#FAD8C8] hover:bg-[#6B1D0E]'}`}>
+                      <Icon className="w-4 h-4" />{item.label}
+                    </button>
+                  ); 
+                })}
               </div>
             </div>
           </header>
 
-          {toast && <div className="fixed top-16 right-4 z-50 bg-[#4E8B31] text-white px-4 py-2.5 rounded-xl shadow text-xs font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {toast}</div>}
+          {toast && <div className="fixed top-24 right-4 z-50 bg-[#4E8B31] text-white px-4 py-2.5 rounded-xl shadow text-xs font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {toast}</div>}
 
           <main className="max-w-7xl mx-auto px-3 sm:px-5 pt-5">
-            {activeTab === 'record' && <RecordTripView user={user} currencySymbol={preferences.currencySymbol} defaultVehicle={preferences.defaultVehicle} editingTrip={editingTrip} onCancelEdit={() => setEditingTrip(null)} onSaved={(msg) => { setEditingTrip(null); setToast(msg); setTimeout(() => setToast(''), 3000); }} />}
-            {activeTab === 'dashboard' && <DashboardView trips={trips} expenses={expenses} currencySymbol={preferences.currencySymbol} userEmail={user.email} />}
-            {activeTab === 'history' && <TripHistoryView trips={trips} expenses={expenses} currencySymbol={preferences.currencySymbol} user={user} userEmail={user.email} onEditTrip={(t) => { setEditingTrip(t); setActiveTab('record'); }} />}
-            {activeTab === 'expenses' && <ExpensesView expenses={expenses} currencySymbol={preferences.currencySymbol} user={user} defaultVehicle={preferences.defaultVehicle} />}
-            {activeTab === 'settings' && <SettingsView user={user} preferences={preferences} onSavePreferences={async (p) => { setPreferences(prev => ({...prev, ...p})); await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'preferences'), p, { merge: true }); }} trips={trips} expenses={expenses} />}
-          </main>
+            {appMode === 'driver' && activeDriverTab === 'record' && <RecordTripView user={user} currencySymbol={preferences.currencySymbol} defaultVehicle={preferences.defaultVehicle} editingTrip={editingTrip} onCancelEdit={() => setEditingTrip(null)} onSaved={(msg) => { setEditingTrip(null); setToast(msg); setTimeout(() => setToast(''), 3000); setActiveDriverTab('history'); }} />}
+            {appMode === 'driver' && activeDriverTab === 'dashboard' && <DriverDashboardView trips={trips} expenses={expenses} currencySymbol={preferences.currencySymbol} userEmail={user.email} businessName={preferences.businessName} />}
+            {appMode === 'driver' && activeDriverTab === 'history' && <DriverHistoryView trips={trips} expenses={expenses} currencySymbol={preferences.currencySymbol} user={user} userEmail={user.email} businessName={preferences.businessName} onEditTrip={(t) => { setEditingTrip(t); setActiveDriverTab('record'); }} />}
+            
+            {appMode === 'provider' && activeProviderTab === 'record' && <RecordProviderTxView user={user} currencySymbol={preferences.currencySymbol} editingTx={editingTx} onCancelEdit={() => setEditingTx(null)} onSaved={(msg) => { setEditingTx(null); setToast(msg); setTimeout(() => setToast(''), 3000); setActiveProviderTab('history'); }} />}
+            {appMode === 'provider' && activeProviderTab === 'dashboard' && <ProviderDashboardView providerTransactions={providerTransactions} currencySymbol={preferences.currencySymbol} userEmail={user.email} businessName={preferences.businessName} />}
+            {appMode === 'provider' && activeProviderTab === 'history' && <ProviderHistoryView providerTransactions={providerTransactions} currencySymbol={preferences.currencySymbol} user={user} userEmail={user.email} businessName={preferences.businessName} onEditTx={(tx) => { setEditingTx(tx); setActiveProviderTab('record'); }} />}
 
-          <nav className="md:hidden fixed bottom-0 inset-x-0 bg-[#4E1609] border-t-2 border-[#E5A93C] z-30 flex justify-around py-1.5 no-print">
-            {navItems.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => { if(item.id !== 'record') setEditingTrip(null); setActiveTab(item.id); }} className={`flex flex-col items-center py-1 px-2 rounded-xl text-[10px] font-extrabold ${activeTab === item.id ? 'bg-[#FAD8C8] text-[#4E1609]' : 'text-[#FAD8C8]'}`}><Icon className="w-4 h-4 mb-0.5" />{item.label}</button>; })}
-          </nav>
+            {activeTab === 'org-history' && <OrganizationHistoryView trips={trips} providerTransactions={providerTransactions} currencySymbol={preferences.currencySymbol} />}
+            {activeTab === 'settings' && <SettingsView user={user} preferences={preferences} onSavePreferences={async (p) => { setPreferences(prev => ({...prev, ...p})); await setDoc(doc(db, 'artifacts', APP_ID, 'users', user.uid, 'profile', 'preferences'), p, { merge: true }); }} />}
+          </main>
         </div>
       );
     }
